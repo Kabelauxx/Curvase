@@ -113,13 +113,17 @@ $._curvase = {
             prop.setSpatialTangentsAtKey(k1, zero, outNext);
         } else {
             var u = basis.u;
-            var v = basis.v;
             var L = basis.len;
+            // Value-graph Bezier (time vs value) must not drive perpendicular path curvature.
+            // Old: mixed sy/sx into v (normal) → presets like Ease In bent the motion sideways first.
+            // Keep handles collinear with travel; temporal easing comes from KeyframeEase only.
+            var outMag = sx1 * L;
+            var inMag = (1 - sx2) * L;
             var outTan = [];
             var inTan = [];
             for (var d = 0; d < dims; d++) {
-                outTan.push(u[d] * (sx1 * L) + v[d] * ((sy1 - sx1) * L));
-                inTan.push(-u[d] * ((1 - sx2) * L) + v[d] * ((sy2 - sx2) * L));
+                outTan.push(u[d] * outMag);
+                inTan.push(-u[d] * inMag);
             }
             prop.setSpatialTangentsAtKey(k0, inPrev, outTan);
             prop.setSpatialTangentsAtKey(k1, inTan, outNext);
@@ -532,11 +536,13 @@ $._curvase = {
         if (vt === PropertyValueType.ThreeD || vt === PropertyValueType.TwoD) {
             var vA = prop.keyValue(k0);
             var vB = prop.keyValue(k1);
+            var sx1e = Math.max(0.001, Math.min(0.999, sx1));
+            var omx = Math.max(0.001, 1 - sx2);
             for (var d = 0; d < vA.length; d++) {
                 var delta = vB[d] - vA[d];
-                var outSpd = (Math.abs(delta) < 0.0001 || dur <= 0) ? 0 : sy1 * delta / (sx1 * dur);
+                var outSpd = (Math.abs(delta) < 0.0001 || dur <= 0) ? 0 : sy1 * delta / (sx1e * dur);
                 var outInf = Math.max(0.1, Math.min(100, sx1 * 100));
-                var inSpd = (Math.abs(delta) < 0.0001 || dur <= 0) ? 0 : (1 - sy2) * delta / ((1 - sx2) * dur);
+                var inSpd = (Math.abs(delta) < 0.0001 || dur <= 0) ? 0 : (1 - sy2) * delta / (omx * dur);
                 var inInf = Math.max(0.1, Math.min(100, (1 - sx2) * 100));
                 outEaseArr.push(new KeyframeEase(outSpd, outInf));
                 inEaseArr.push(new KeyframeEase(inSpd, inInf));
@@ -557,9 +563,11 @@ $._curvase = {
             } else {
                 delta = prop.keyValue(k1) - prop.keyValue(k0);
             }
-            var outSpd = (Math.abs(delta) < 0.0001 || dur <= 0) ? 0 : sy1 * delta / (sx1 * dur);
+            var sx1b = Math.max(0.001, Math.min(0.999, sx1));
+            var omxb = Math.max(0.001, 1 - sx2);
+            var outSpd = (Math.abs(delta) < 0.0001 || dur <= 0) ? 0 : sy1 * delta / (sx1b * dur);
             var outInf = Math.max(0.1, Math.min(100, sx1 * 100));
-            var inSpd = (Math.abs(delta) < 0.0001 || dur <= 0) ? 0 : (1 - sy2) * delta / ((1 - sx2) * dur);
+            var inSpd = (Math.abs(delta) < 0.0001 || dur <= 0) ? 0 : (1 - sy2) * delta / (omxb * dur);
             var inInf = Math.max(0.1, Math.min(100, (1 - sx2) * 100));
             outEaseArr = [new KeyframeEase(outSpd, outInf)];
             inEaseArr = [new KeyframeEase(inSpd, inInf)];
@@ -1076,22 +1084,33 @@ function buatKamera15mm(rasio) {
 }
 
 function buatNullParent() {
-    app.beginUndoGroup("Null Parent & Track");
-    var comp = app.project.activeItem;
-    if (comp == null || !(comp instanceof CompItem)) {
-        app.endUndoGroup();
+    var c = app.project.activeItem;
+    if (!(c instanceof CompItem)) {
+        alert("No active comp.");
         return;
     }
-    var layerYangDipilih = comp.selectedLayers;
-    var adaTarget = layerYangDipilih.length > 0;
-    var targetLayer = adaTarget ? layerYangDipilih[0] : null;
-    var nullLayer = comp.layers.addNull(comp.duration);
-    if (adaTarget && targetLayer != null) {
-        nullLayer.moveBefore(targetLayer);
-        nullLayer.parent = targetLayer;
-    } else if (comp.numLayers >= 2) {
-        nullLayer.parent = comp.layer(2);
+
+    var selectedLayers = c.selectedLayers;
+
+    if (selectedLayers.length !== 1) {
+        alert("Pilih tepat 1 layer.");
+        return;
     }
+
+    var targetLayer = selectedLayers[0];
+
+    app.beginUndoGroup("Create Null Above Layer");
+
+    var newNull = c.layers.addNull();
+    newNull.name = "Null Controller";
+
+    newNull.inPoint = targetLayer.inPoint;
+    newNull.outPoint = targetLayer.outPoint;
+
+    newNull.moveBefore(targetLayer);
+
+    targetLayer.parent = newNull;
+
     app.endUndoGroup();
 }
 
