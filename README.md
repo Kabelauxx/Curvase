@@ -53,3 +53,16 @@ curvase-extensions/
 ├── ext.js                  CEP integration and initialization
 └── MainScript.jsx          ExtendScript entry point and loader
 ```
+
+5/3/2026 - 5/10/2026
+
+Main Developers
+-Crayon
+-Kabelauxx
+-Cryztalz
+
+Some Idea From
+-J1zo
+
+Demak Demek Tools From
+-Ciko
