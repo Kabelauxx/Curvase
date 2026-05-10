@@ -15,8 +15,8 @@ An Adobe After Effects extension for interactive Bezier easing curve editing. Cu
 
 ## Compatibility
 
-- Adobe After Effects 2018 (v15.0) or Newer
-- CEP 11 (CSXS 11.0)
+- Adobe After Effects 2020 (v17.0) or Newer
+- CEP 11 (CSXS 9.0)
 
 ## Installation
 
@@ -42,7 +42,7 @@ An Adobe After Effects extension for interactive Bezier easing curve editing. Cu
 ```
 curvase-extensions/
 ├── CSXS/
-│   └── manifest.xml        Extension manifest (CEP 11, AE 15.0+)
+│   └── manifest.xml        Extension manifest (CEP 9, AE 17.0+)
 ├── lib/
 │   └── CSInterface-4.0.0.js  Adobe CEP interface library
 ├── jsx/
