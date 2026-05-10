@@ -1077,9 +1077,8 @@ function buatSolidFill(rasio) {
 function buatKamera15mm(rasio) {
     app.beginUndoGroup("Camera");
     var comp = cekDanBikinComp(rasio);
-    var cam = comp.layers.addCamera("Camera", [comp.width / 2, comp.height / 2]);
-    var zoomHitung = (comp.width / 36) * 15;
-    cam.property("ADBE Camera Options Group").property("ADBE Camera Zoom").setValue(zoomHitung);
+    comp.openInViewer();
+    app.executeCommand(2564);
     app.endUndoGroup();
 }
 
