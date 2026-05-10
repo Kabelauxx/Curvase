@@ -210,6 +210,48 @@
     </div>
 </div>
 
+<div id="theme-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="theme-modal-title">
+    <div class="modal-content theme-modal-content" role="document">
+        <h3 id="theme-modal-title">Theme Curvase</h3>
+        <p class="modal-hint">Click a preset to change all, or adjust the colors individually.</p>
+
+        <div class="theme-presets" id="theme-presets">
+            <button type="button" class="theme-preset-btn" data-theme-preset="default">Default</button>
+            <button type="button" class="theme-preset-btn" data-theme-preset="ocean">Ocean</button>
+            <button type="button" class="theme-preset-btn" data-theme-preset="violet">Violet</button>
+        </div>
+
+        <div class="theme-grid" id="theme-grid">
+            <label class="theme-row"><span>Background</span><input type="color" data-theme-var="--bg"></label>
+            <label class="theme-row"><span>Surface</span><input type="color" data-theme-var="--surface"></label>
+            <label class="theme-row"><span>Surface 2</span><input type="color" data-theme-var="--surface2"></label>
+            <label class="theme-row"><span>Border</span><input type="color" data-theme-var="--border"></label>
+            <label class="theme-row"><span>Border 2</span><input type="color" data-theme-var="--border2"></label>
+            <label class="theme-row"><span>Text</span><input type="color" data-theme-var="--text"></label>
+            <label class="theme-row"><span>Text Dim</span><input type="color" data-theme-var="--text-dim"></label>
+            <label class="theme-row"><span>Text Mute</span><input type="color" data-theme-var="--text-mute"></label>
+            <label class="theme-row"><span>Accent</span><input type="color" data-theme-var="--accent"></label>
+            <label class="theme-row"><span>Accent 2</span><input type="color" data-theme-var="--accent2"></label>
+            <label class="theme-row"><span>Blue</span><input type="color" data-theme-var="--blue"></label>
+            <label class="theme-row"><span>White</span><input type="color" data-theme-var="--white"></label>
+            <label class="theme-row"><span>Graph Inside</span><input type="color" data-theme-var="--graph-inner-bg" data-theme-alpha="true"></label>
+            <label class="theme-row"><span>Graph Grid</span><input type="color" data-theme-var="--graph-grid" data-theme-alpha="true"></label>
+            <label class="theme-row"><span>Graph Border</span><input type="color" data-theme-var="--graph-box-border" data-theme-alpha="true"></label>
+            <label class="theme-row"><span>Graph Diagonal</span><input type="color" data-theme-var="--graph-diagonal" data-theme-alpha="true"></label>
+            <label class="theme-row"><span>Graph Outer</span><input type="color" data-theme-var="--graph-canvas-bg"></label>
+            <label class="theme-row"><span>Ease Line</span><input type="color" data-theme-var="--curve-main"></label>
+            <label class="theme-row"><span>Ease Dot End</span><input type="color" data-theme-var="--curve-endpoint"></label>
+            <label class="theme-row"><span>Ease Dot Out</span><input type="color" data-theme-var="--curve-handle-out"></label>
+            <label class="theme-row"><span>Ease Dot In</span><input type="color" data-theme-var="--curve-handle-in"></label>
+        </div>
+
+        <div class="modal-actions">
+            <button type="button" id="btn-theme-reset">Reset</button>
+            <button type="button" id="btn-theme-close">Close</button>
+        </div>
+    </div>
+</div>
+
 <script src="./lib/CSInterface-4.0.0.js"></script>
 <script src="./curvase.js"></script>
 <script src="./ext.js"></script>

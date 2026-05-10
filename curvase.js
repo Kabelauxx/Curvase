@@ -12,6 +12,30 @@ var Curvase = (function() {
 
     var RESET_VALUES = [0.42, 0, 0.58, 1.0];
 
+    function cssVar(name, fallback) {
+        try {
+            var v = getComputedStyle(document.documentElement).getPropertyValue(name);
+            if (v) {
+                v = String(v).trim();
+                if (v) return v;
+            }
+        } catch (e) {}
+        return fallback;
+    }
+
+    function hexToRgba(hex, alpha) {
+        var h = String(hex || "").trim().replace("#", "");
+        if (h.length === 3) {
+            h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+        }
+        if (h.length !== 6) return hex;
+        var r = parseInt(h.substring(0, 2), 16);
+        var g = parseInt(h.substring(2, 4), 16);
+        var b = parseInt(h.substring(4, 6), 16);
+        if (!isFinite(r) || !isFinite(g) || !isFinite(b)) return hex;
+        return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
+    }
+
     function lerp(a, b, t) {
         return a + (b - a) * t;
     }
@@ -552,10 +576,19 @@ var Curvase = (function() {
 
         var hasBg = !!this.bgImage;
 
-        ctx.fillStyle = "rgba(0,0,0,0.18)";
+        var graphInnerHex = cssVar("--graph-inner-bg", "#000000");
+        var graphGridHex = cssVar("--graph-grid", "#ffffff");
+        var graphBorderHex = cssVar("--graph-box-border", "#ffffff");
+        var graphDiagHex = cssVar("--graph-diagonal", "#ffffff");
+        var curveMain = cssVar("--curve-main", "#00d4aa");
+        var curveEndpoint = cssVar("--curve-endpoint", "#777777");
+        var curveHandleOut = cssVar("--curve-handle-out", "#ff8c42");
+        var curveHandleIn = cssVar("--curve-handle-in", "#4a9eff");
+
+        ctx.fillStyle = hasBg ? "rgba(0,0,0,0.18)" : hexToRgba(graphInnerHex, 0.18);
         ctx.fillRect(boxLeft, boxTop, boxW, boxH);
 
-        ctx.strokeStyle = hasBg ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.06)";
+        ctx.strokeStyle = hasBg ? "rgba(255,255,255,0.18)" : hexToRgba(graphGridHex, 0.06);
         ctx.lineWidth = 1;
         for (var i = 1; i < 4; i++) {
             var gx = this._toX(i / 4);
@@ -564,7 +597,7 @@ var Curvase = (function() {
             ctx.beginPath(); ctx.moveTo(boxLeft, gy); ctx.lineTo(boxRight, gy); ctx.stroke();
         }
 
-        ctx.strokeStyle = hasBg ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.15)";
+        ctx.strokeStyle = hasBg ? "rgba(255,255,255,0.4)" : hexToRgba(graphBorderHex, 0.15);
         ctx.lineWidth = 1;
         ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
 
@@ -579,7 +612,7 @@ var Curvase = (function() {
         if (!this.isSpeedMode) {
 
             ctx.beginPath();
-            ctx.strokeStyle = hasBg ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)";
+            ctx.strokeStyle = hasBg ? "rgba(255,255,255,0.15)" : hexToRgba(graphDiagHex, 0.05);
             ctx.lineWidth = 1;
             ctx.moveTo(this._toX(0), this._toY(0));
             ctx.lineTo(this._toX(1), this._toY(1));
@@ -622,9 +655,9 @@ var Curvase = (function() {
 
             ctx.save();
             ctx.beginPath();
-            ctx.strokeStyle = "rgba(0,212,170," + glowAlpha.toFixed(3) + ")";
+            ctx.strokeStyle = hexToRgba(curveMain, glowAlpha.toFixed(3));
             ctx.lineWidth = glowWidth;
-            ctx.shadowColor = "#00d4aa";
+            ctx.shadowColor = curveMain;
             ctx.shadowBlur = glowBlur;
             ctx.moveTo(this._toX(this.points[0].x), this._toY(this.points[0].y));
             for (var si = 0; si < this.points.length - 1; si++) {
@@ -635,7 +668,7 @@ var Curvase = (function() {
             ctx.restore();
 
             ctx.beginPath();
-            ctx.strokeStyle = "#00d4aa";
+            ctx.strokeStyle = curveMain;
             ctx.lineWidth = 2;
             ctx.moveTo(this._toX(this.points[0].x), this._toY(this.points[0].y));
             for (var si = 0; si < this.points.length - 1; si++) {
@@ -644,8 +677,8 @@ var Curvase = (function() {
             }
             ctx.stroke();
 
-            ctx.beginPath(); ctx.fillStyle = "#777"; ctx.arc(this._toX(this.points[0].x), this._toY(this.points[0].y), 4, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.fillStyle = "#777"; var lastPt = this.points[this.points.length - 1]; ctx.arc(this._toX(lastPt.x), this._toY(lastPt.y), 4, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.fillStyle = curveEndpoint; ctx.arc(this._toX(this.points[0].x), this._toY(this.points[0].y), 4, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.fillStyle = curveEndpoint; var lastPt = this.points[this.points.length - 1]; ctx.arc(this._toX(lastPt.x), this._toY(lastPt.y), 4, 0, Math.PI * 2); ctx.fill();
 
             for (var ai = 1; ai < this.points.length - 1; ai++) {
                 this._drawAnchor(ctx, this.points[ai].x, this.points[ai].y);
@@ -655,8 +688,8 @@ var Curvase = (function() {
                 var hp = this.points[hi];
                 var activeOut = (this.dragging || this.hovering) && ((this.dragging || this.hovering).type === "hOut") && ((this.dragging || this.hovering).index === hi);
                 var activeIn  = (this.dragging || this.hovering) && ((this.dragging || this.hovering).type === "hIn")  && ((this.dragging || this.hovering).index === hi);
-                if (hp.hOutX !== null) this._drawHandle(ctx, hp.hOutX, hp.hOutY, "#ff8c42", activeOut);
-                if (hp.hInX !== null)  this._drawHandle(ctx, hp.hInX,  hp.hInY,  "#4a9eff", activeIn);
+                if (hp.hOutX !== null) this._drawHandle(ctx, hp.hOutX, hp.hOutY, curveHandleOut, activeOut);
+                if (hp.hInX !== null)  this._drawHandle(ctx, hp.hInX,  hp.hInY,  curveHandleIn, activeIn);
             }
 
         } else {

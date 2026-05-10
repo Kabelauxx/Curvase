@@ -15,6 +15,15 @@
     --accent2:   #ff8c42;
     --blue:      #4a9eff;
     --white:     #ffffff;
+    --graph-inner-bg: rgba(0,0,0,0.18);
+    --graph-grid: rgba(255,255,255,0.06);
+    --graph-box-border: rgba(255,255,255,0.15);
+    --graph-diagonal: rgba(255,255,255,0.05);
+    --graph-canvas-bg: #181818;
+    --curve-main: #00d4aa;
+    --curve-endpoint: #777777;
+    --curve-handle-out: #ff8c42;
+    --curve-handle-in: #4a9eff;
     --radius:    5px;
     --radius-sm: 3px;
     --trans:     0.15s ease;
@@ -147,6 +156,7 @@ select:focus-visible,
     padding: 2px 8px;
     flex-shrink: 0;
     transition: color 0.3s var(--ease-snap), border-color 0.3s var(--ease-snap), background 0.3s var(--ease-snap), transform 0.4s var(--ease-bounce);
+    cursor: pointer;
 }
 .mode-badge.mode-badge--pop {
     animation: modeBadgeSpring 0.65s var(--ease-bounce-lg) both;
@@ -302,7 +312,7 @@ select:focus-visible,
 
 #canvas-container {
     flex: 1;
-    background: #181818;
+    background: var(--graph-canvas-bg);
     border-radius: var(--radius);
     border: 1px solid var(--border);
     display: flex;
@@ -450,7 +460,7 @@ select:focus-visible,
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
+    margin-bottom: 2px;
     padding: 6px 8px;
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -577,6 +587,16 @@ select:focus-visible,
     padding-right: 2px;
 }
 
+#controls.presets-collapsed #presets-header {
+    display: none;
+}
+
+#controls.presets-collapsed #presets-panel {
+    height: 0 !important;
+    padding-right: 0;
+    overflow: hidden;
+}
+
 
 #presets-panel::-webkit-scrollbar { width: 3px; }
 #presets-panel::-webkit-scrollbar-track { background: transparent; }
@@ -649,6 +669,59 @@ select:focus-visible,
     border: 1px solid var(--border2);
     width: 220px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+
+.theme-modal-content {
+    width: 300px;
+    max-height: 78vh;
+    overflow: auto;
+}
+
+.theme-presets {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.theme-preset-btn {
+    height: 26px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 10px;
+}
+
+.theme-preset-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.theme-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+}
+
+.theme-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--text-dim);
+}
+
+.theme-row input[type="color"] {
+    width: 36px;
+    height: 22px;
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
 }
 
 .modal-content h3 {

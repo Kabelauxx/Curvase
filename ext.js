@@ -480,6 +480,206 @@ var curvaseApp = (function() {
         }
 
         var modeBadge = document.getElementById("header-mode-badge");
+        var themeModal = document.getElementById("theme-modal");
+        var themeInputs = [];
+        var THEME_KEY = "curvase_theme_v1";
+        var THEME_DEFAULT = {
+            "--bg": "#1a1a1a",
+            "--surface": "#222222",
+            "--surface2": "#2a2a2a",
+            "--border": "#333333",
+            "--border2": "#3d3d3d",
+            "--text": "#e0e0e0",
+            "--text-dim": "#888888",
+            "--text-mute": "#555555",
+            "--accent": "#ffffff",
+            "--accent2": "#ff8c42",
+            "--blue": "#4a9eff",
+            "--white": "#ffffff",
+            "--graph-inner-bg": "#000000",
+            "--graph-grid": "#ffffff",
+            "--graph-box-border": "#ffffff",
+            "--graph-diagonal": "#ffffff",
+            "--graph-canvas-bg": "#181818",
+            "--curve-main": "#00d4aa",
+            "--curve-endpoint": "#777777",
+            "--curve-handle-out": "#ff8c42",
+            "--curve-handle-in": "#4a9eff"
+        };
+        var THEME_PRESETS = {
+            "default": THEME_DEFAULT,
+            "ocean": {
+                "--bg": "#0f1b24",
+                "--surface": "#122632",
+                "--surface2": "#16313f",
+                "--border": "#24495d",
+                "--border2": "#2d5f79",
+                "--text": "#ddf4ff",
+                "--text-dim": "#95c7dc",
+                "--text-mute": "#5c889b",
+                "--accent": "#7df4ff",
+                "--accent2": "#00e0a4",
+                "--blue": "#5fb9ff",
+                "--white": "#f2feff",
+                "--graph-inner-bg": "#03131c",
+                "--graph-grid": "#7ecde4",
+                "--graph-box-border": "#b5f6ff",
+                "--graph-diagonal": "#7ecde4",
+                "--graph-canvas-bg": "#081a22",
+                "--curve-main": "#3dffd7",
+                "--curve-endpoint": "#95d8e8",
+                "--curve-handle-out": "#49f2bf",
+                "--curve-handle-in": "#5fb9ff"
+            },
+            "violet": {
+                "--bg": "#191523",
+                "--surface": "#231d30",
+                "--surface2": "#2c2440",
+                "--border": "#3d3158",
+                "--border2": "#4e3d73",
+                "--text": "#efe9ff",
+                "--text-dim": "#bcaedd",
+                "--text-mute": "#7f719f",
+                "--accent": "#cdb7ff",
+                "--accent2": "#ff8dd9",
+                "--blue": "#8ab4ff",
+                "--white": "#ffffff",
+                "--graph-inner-bg": "#0f0b1a",
+                "--graph-grid": "#d5c4ff",
+                "--graph-box-border": "#f0e9ff",
+                "--graph-diagonal": "#cdb7ff",
+                "--graph-canvas-bg": "#161026",
+                "--curve-main": "#cdb7ff",
+                "--curve-endpoint": "#b9a8d7",
+                "--curve-handle-out": "#ff8dd9",
+                "--curve-handle-in": "#8ab4ff"
+            }
+        };
+
+        function rgbToHex(rgb) {
+            if (!rgb) return "#000000";
+            if (rgb.charAt(0) === "#") return rgb;
+            var m = rgb.match(/\d+/g);
+            if (!m || m.length < 3) return "#000000";
+            var r = parseInt(m[0], 10), g = parseInt(m[1], 10), b = parseInt(m[2], 10);
+            function h(n) { var s = n.toString(16); return s.length < 2 ? "0" + s : s; }
+            return "#" + h(r) + h(g) + h(b);
+        }
+
+        function getThemeFromCss() {
+            var out = {};
+            var cs = getComputedStyle(document.documentElement);
+            for (var key in THEME_DEFAULT) {
+                if (!Object.prototype.hasOwnProperty.call(THEME_DEFAULT, key)) continue;
+                var raw = (cs.getPropertyValue(key) || "").trim();
+                if (key === "--graph-inner-bg") {
+                    out[key] = rgbToHex(raw);
+                } else if (key === "--graph-grid" || key === "--graph-box-border" || key === "--graph-diagonal") {
+                    out[key] = rgbToHex(raw);
+                } else {
+                    out[key] = rgbToHex(raw);
+                }
+            }
+            return out;
+        }
+
+        function applyTheme(themeObj) {
+            if (!themeObj) return;
+            for (var key in THEME_DEFAULT) {
+                if (!Object.prototype.hasOwnProperty.call(THEME_DEFAULT, key)) continue;
+                var val = themeObj[key];
+                if (typeof val === "string" && val) {
+                    document.documentElement.style.setProperty(key, val);
+                }
+            }
+        }
+
+        function saveTheme(themeObj) {
+            try { localStorage.setItem(THEME_KEY, JSON.stringify(themeObj)); } catch (e) {}
+        }
+
+        function refreshThemeInputs() {
+            var current = getThemeFromCss();
+            for (var i = 0; i < themeInputs.length; i++) {
+                var inp = themeInputs[i];
+                var key = inp.getAttribute("data-theme-var");
+                if (key && current[key]) inp.value = current[key];
+            }
+        }
+
+        function openThemeModal() {
+            if (!themeModal) return;
+            refreshThemeInputs();
+            themeModal.classList.remove("modal-closing");
+            themeModal.classList.add("modal-open");
+        }
+
+        function closeThemeModal() {
+            if (!themeModal || !themeModal.classList.contains("modal-open")) return;
+            themeModal.classList.add("modal-closing");
+            setTimeout(function() {
+                themeModal.classList.remove("modal-open", "modal-closing");
+            }, 150);
+        }
+
+        (function initThemeEditor() {
+            var saved = null;
+            try { saved = JSON.parse(localStorage.getItem(THEME_KEY) || "null"); } catch (e) {}
+            applyTheme(saved || THEME_DEFAULT);
+
+            if (modeBadge) {
+                modeBadge.title = "Click to edit Curvase theme";
+                modeBadge.addEventListener("click", function() {
+                    openThemeModal();
+                });
+            }
+
+            var themeGrid = document.getElementById("theme-grid");
+            if (themeGrid) {
+                themeInputs = Array.prototype.slice.call(themeGrid.querySelectorAll("input[data-theme-var]"));
+                themeInputs.forEach(function(inp) {
+                    inp.addEventListener("input", function() {
+                        var key = inp.getAttribute("data-theme-var");
+                        if (!key) return;
+                        document.documentElement.style.setProperty(key, inp.value);
+                        saveTheme(getThemeFromCss());
+                    });
+                });
+            }
+
+            var presetWrap = document.getElementById("theme-presets");
+            if (presetWrap) {
+                presetWrap.addEventListener("click", function(e) {
+                    var btn = e.target;
+                    if (!btn || !btn.getAttribute) return;
+                    var presetName = btn.getAttribute("data-theme-preset");
+                    if (!presetName || !THEME_PRESETS[presetName]) return;
+                    applyTheme(THEME_PRESETS[presetName]);
+                    saveTheme(getThemeFromCss());
+                    refreshThemeInputs();
+                    showToast("Theme preset: " + presetName, "success");
+                });
+            }
+
+            var btnResetTheme = document.getElementById("btn-theme-reset");
+            if (btnResetTheme) {
+                btnResetTheme.onclick = function() {
+                    applyTheme(THEME_DEFAULT);
+                    saveTheme(getThemeFromCss());
+                    refreshThemeInputs();
+                    showToast("Theme reset to default.", "info");
+                };
+            }
+
+            var btnCloseTheme = document.getElementById("btn-theme-close");
+            if (btnCloseTheme) btnCloseTheme.onclick = closeThemeModal;
+
+            if (themeModal) {
+                themeModal.addEventListener("click", function(e) {
+                    if (e.target === themeModal) closeThemeModal();
+                });
+            }
+        })();
         btnMode.onclick = function() {
             isToolsMode = !isToolsMode;
             var from = isToolsMode ? viewCurve : viewTools;
@@ -836,6 +1036,8 @@ var curvaseApp = (function() {
         document.addEventListener("keydown", function(e) {
             if (e.key === "Escape" && editModal.classList.contains("modal-open")) {
                 closeModal();
+            } else if (e.key === "Escape" && themeModal && themeModal.classList.contains("modal-open")) {
+                closeThemeModal();
             }
         });
 
@@ -873,8 +1075,16 @@ var curvaseApp = (function() {
 
         var resizer = document.getElementById("resizer");
         var presetsPanel = document.getElementById("presets-panel");
+        var controlsPanel = document.getElementById("controls");
         var isResizing = false;
         var startY, startHeight;
+
+        function updatePresetsCollapsedState(heightPx) {
+            if (!controlsPanel) return;
+            controlsPanel.classList.toggle("presets-collapsed", heightPx <= 6);
+        }
+
+        updatePresetsCollapsedState(parseInt(window.getComputedStyle(presetsPanel).height, 10) || 0);
 
         resizer.addEventListener('mousedown', function(e) {
             isResizing = true;
@@ -895,6 +1105,7 @@ var curvaseApp = (function() {
             if(newHeight > maxH) newHeight = maxH;
 
             presetsPanel.style.height = newHeight + 'px';
+            updatePresetsCollapsedState(newHeight);
             editor.resize();
         });
 
@@ -1376,12 +1587,14 @@ var curvaseApp = (function() {
                         return;
                     }
 
-                    var sumX1 = 0, sumY1 = 0, sumX2 = 0, sumY2 = 0, validCount = 0;
+                    var pickedSegments = null;
+                    var pickedPropName = "";
 
                     for (var i = 0; i < data.properties.length; i++) {
                         var prop = data.properties[i];
                         var kfs = prop.keyframes;
                         if (!kfs || kfs.length < 2) continue;
+                        var propSegments = [];
 
                         for (var j = 0; j < kfs.length - 1; j++) {
                             var k1 = kfs[j], k2 = kfs[j + 1];
@@ -1392,16 +1605,24 @@ var curvaseApp = (function() {
 
                             var b = easePairToNormalizedBezier(k1, k2, prop);
                             if (!b) continue;
-                            sumX1 += b.px1; sumY1 += b.py1;
-                            sumX2 += b.px2; sumY2 += b.py2;
-                            validCount++;
+                            propSegments.push(b);
+                        }
+
+                        if (propSegments.length) {
+                            pickedSegments = propSegments;
+                            pickedPropName = prop.property || prop.name || "";
+                            break;
                         }
                     }
 
-                    if (validCount > 0) {
-                        editor.setEndHandles(sumX1/validCount, sumY1/validCount, sumX2/validCount, sumY2/validCount);
+                    if (pickedSegments && pickedSegments.length > 0) {
+                        setCurveFromReadSegments(pickedSegments);
                         syncInputs();
-                        showToast("Curve updated from " + validCount + " segment" + (validCount !== 1 ? "s" : "") + ".", "success");
+                        var segCount = pickedSegments.length;
+                        var keyCount = segCount + 1;
+                        var msg = "Curve read from " + keyCount + " selected keyframe" + (keyCount !== 1 ? "s" : "") + ".";
+                        if (pickedPropName) msg += " (" + pickedPropName + ")";
+                        showToast(msg, "success");
                     } else {
                         showToast("No readable segments. Use adjacent keys (same index + 1), not HOLD.", "info");
                     }
@@ -1663,6 +1884,45 @@ var curvaseApp = (function() {
             header.style.display = anyVisible ? "" : "none";
             grid.style.display   = anyVisible ? "" : "none";
         });
+    }
+
+    function setCurveFromReadSegments(segments) {
+        if (!segments || !segments.length) return false;
+
+        var pointCount = segments.length + 1;
+        var points = [];
+        var i;
+
+        for (i = 0; i < pointCount; i++) {
+            var t = (pointCount === 1) ? 0 : (i / (pointCount - 1));
+            points.push({
+                x: Math.round(t * 100) / 100,
+                y: Math.round(t * 100) / 100,
+                hInX: null, hInY: null,
+                hOutX: null, hOutY: null
+            });
+        }
+
+        for (i = 0; i < segments.length; i++) {
+            var a = points[i];
+            var b = points[i + 1];
+            var seg = segments[i];
+            var dx = b.x - a.x;
+            var dy = b.y - a.y;
+            a.hOutX = Math.round((a.x + seg.px1 * dx) * 100) / 100;
+            a.hOutY = Math.round((a.y + seg.py1 * dy) * 100) / 100;
+            b.hInX = Math.round((a.x + seg.px2 * dx) * 100) / 100;
+            b.hInY = Math.round((a.y + seg.py2 * dy) * 100) / 100;
+        }
+
+        editor._cancelMorph();
+        editor._commit();
+        editor.points = points;
+        if (editor._future) editor._future = [];
+        editor._scheduleRender();
+        if (editor.onUpdate) editor.onUpdate();
+        if (editor.onHistoryChange) editor.onHistoryChange();
+        return true;
     }
 
     function syncInputs() {
