@@ -1010,6 +1010,58 @@ var Curvase = (function() {
         return this.points.length;
     };
 
+    BezierEditor.prototype.reverseBezierHandles = function() {
+        this._cancelMorph();
+        this._commit();
+        var pts = this.points;
+        if (pts.length < 2) return false;
+
+        for (var i = 0; i < pts.length - 1; i++) {
+            var a = pts[i];
+            var b = pts[i + 1];
+            var dx = b.x - a.x;
+            var dy = b.y - a.y;
+
+            var sx1, sy1, sx2, sy2;
+            if (dx > 0.0001) {
+                sx1 = (a.hOutX - a.x) / dx;
+                sx2 = (b.hInX - a.x) / dx;
+            } else {
+                sx1 = 0;
+                sx2 = 1;
+            }
+            if (Math.abs(dy) > 0.0001) {
+                sy1 = (a.hOutY - a.y) / dy;
+                sy2 = (b.hInY - a.y) / dy;
+            } else {
+                sy1 = sx1;
+                sy2 = sx2;
+            }
+            if (!isFinite(sx1)) sx1 = 0;
+            if (!isFinite(sy1)) sy1 = 0;
+            if (!isFinite(sx2)) sx2 = 1;
+            if (!isFinite(sy2)) sy2 = 1;
+
+            var nsx1 = 1 - sx2;
+            var nsy1 = 1 - sy2;
+            var nsx2 = 1 - sx1;
+            var nsy2 = 1 - sy1;
+
+            if (dx > 0.0001) {
+                a.hOutX = a.x + nsx1 * dx;
+                b.hInX = a.x + nsx2 * dx;
+            }
+            if (Math.abs(dy) > 0.0001) {
+                a.hOutY = a.y + nsy1 * dy;
+                b.hInY = a.y + nsy2 * dy;
+            }
+        }
+
+        this._scheduleRender();
+        if (this.onUpdate) this.onUpdate();
+        return true;
+    };
+
     BezierEditor.prototype.setZoom = function(level) {
         this.zoomLevel = level;
         var half = 0.5 / level;

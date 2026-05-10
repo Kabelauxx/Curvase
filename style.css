@@ -61,6 +61,7 @@ select:focus-visible,
     height: 100vh;
     padding: 8px 10px 10px;
     gap: 8px;
+    position: relative;
 }
 
 
@@ -834,6 +835,120 @@ select:focus-visible,
 @keyframes gridBtnRipple {
     0%   { transform: scale(0); opacity: 0.8; }
     100% { transform: scale(2.5); opacity: 0; }
+}
+
+.grid-rc-hint {
+    font-size: 9px;
+    color: var(--text-mute);
+    line-height: 1.25;
+    text-align: center;
+    max-width: 92px;
+}
+
+.ae-graph-ctx-menu {
+    position: absolute;
+    z-index: 50000;
+    min-width: 208px;
+    padding: 4px 0;
+    background: #f3f3f3;
+    border: 1px solid #ababab;
+    border-radius: 2px;
+    box-shadow: 2px 4px 18px rgba(0, 0, 0, 0.22);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: 13px;
+    color: #222;
+}
+
+.ae-graph-ctx-item {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 6px 28px 6px 14px;
+    border: none;
+    background: transparent;
+    color: #222;
+    font-size: inherit;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    line-height: 1.35;
+}
+
+.ae-graph-ctx-item:hover,
+.ae-graph-ctx-item:focus-visible {
+    background: #cce8ff;
+    outline: none;
+}
+
+.ae-graph-ctx-item--fly {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ae-graph-ctx-chevron {
+    color: #444;
+    font-size: 11px;
+    opacity: 0.85;
+}
+
+.ae-graph-ctx-sep {
+    height: 1px;
+    margin: 4px 1px;
+    background: #ccc;
+    pointer-events: none;
+}
+
+.ae-graph-ctx-flyout-wrap {
+    position: relative;
+}
+
+.ae-graph-ctx-flyout-panel {
+    display: none;
+    position: absolute;
+    left: calc(100% - 2px);
+    top: -5px;
+    min-width: 192px;
+    padding: 4px 0;
+    margin-left: 2px;
+    background: #f3f3f3;
+    border: 1px solid #ababab;
+    border-radius: 2px;
+    box-shadow: 2px 4px 14px rgba(0, 0, 0, 0.18);
+    z-index: 6;
+}
+
+.ae-graph-ctx-item--flychild {
+    padding-left: 16px;
+}
+
+.grid-context-menu {
+    position: absolute;
+    z-index: 100000;
+    min-width: 132px;
+    padding: 4px 0;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+.grid-context-menu-item {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 8px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.grid-context-menu-item:hover {
+    background: rgba(0, 212, 170, 0.12);
+    color: var(--accent);
 }
 
 .list-btn {

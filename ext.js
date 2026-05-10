@@ -200,6 +200,35 @@ var curvaseApp = (function() {
 
     function init() {
         try { csInterface = new CSInterface(); } catch(e) { return; }
+
+        (function suppressHostContextMenu() {
+            function allowNativeMenu(target) {
+                var el = target;
+                while (el) {
+                    if (!el.tagName) break;
+                    var tag = el.tagName.toUpperCase();
+                    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+                    try {
+                        if (el.getAttribute && el.getAttribute("contenteditable") === "true") return true;
+                    } catch (x) {}
+                    el = el.parentElement;
+                }
+                return false;
+            }
+            function kill(ev) {
+                if (!ev || allowNativeMenu(ev.target)) return;
+                ev.preventDefault();
+            }
+            if (window.addEventListener) {
+                window.addEventListener("contextmenu", kill, true);
+                document.addEventListener("contextmenu", kill, true);
+            }
+            document.oncontextmenu = function(ev) {
+                if (ev && allowNativeMenu(ev.target)) return true;
+                return false;
+            };
+        })();
+
         var toastEl = document.getElementById("status-toast");
         var toastTimer = null;
         function showToast(message, variant) {
@@ -214,6 +243,18 @@ var curvaseApp = (function() {
             toastTimer = setTimeout(function() {
                 toastEl.classList.remove("is-visible");
             }, 3400);
+        }
+
+        var curveGraphCtxEl = null;
+        var curveGraphOutsideClose = null;
+        var curveGraphLastRmbMs = 0;
+
+        function hideCurveGraphContextMenu() {
+            if (curveGraphCtxEl) curveGraphCtxEl.style.display = "none";
+            if (curveGraphOutsideClose) {
+                document.removeEventListener("mousedown", curveGraphOutsideClose, true);
+                curveGraphOutsideClose = null;
+            }
         }
 
         editor = new Curvase.BezierEditor("curve-canvas");
@@ -506,6 +547,123 @@ var curvaseApp = (function() {
         bindDemakBtn("ali-bl", "$._demak.alignLayer('left', 'bottom')");
         bindDemakBtn("ali-bc", "$._demak.alignLayer('center', 'bottom')");
         bindDemakBtn("ali-br", "$._demak.alignLayer('right', 'bottom')");
+
+        var GRID_CELL_XY = {
+            tl: ["left", "top"], tc: ["center", "top"], tr: ["right", "top"],
+            ml: ["left", "middle"], mc: ["center", "middle"], mr: ["right", "middle"],
+            bl: ["left", "bottom"], bc: ["center", "bottom"], br: ["right", "bottom"]
+        };
+        function flipGridAxisX(x) {
+            if (x === "left") return "right";
+            if (x === "right") return "left";
+            return "center";
+        }
+        function flipGridAxisY(y) {
+            if (y === "top") return "bottom";
+            if (y === "bottom") return "top";
+            return "middle";
+        }
+
+        var gridCtxMenuEl = null;
+        var gridCtxPendingBtnId = "";
+        var gridCtxOutsideClose = null;
+        var gridCtxLastPointerOpenMs = 0;
+
+        function hideGridContextMenu() {
+            if (gridCtxMenuEl) gridCtxMenuEl.style.display = "none";
+            gridCtxPendingBtnId = "";
+            if (gridCtxOutsideClose) {
+                document.removeEventListener("mousedown", gridCtxOutsideClose, true);
+                gridCtxOutsideClose = null;
+            }
+        }
+
+        function ensureGridContextMenu() {
+            if (gridCtxMenuEl) return gridCtxMenuEl;
+            gridCtxMenuEl = document.createElement("div");
+            gridCtxMenuEl.className = "grid-context-menu";
+            gridCtxMenuEl.style.display = "none";
+            var item = document.createElement("button");
+            item.type = "button";
+            item.className = "grid-context-menu-item";
+            item.textContent = "Reverse value";
+            item.addEventListener("mousedown", function(ev) { ev.stopPropagation(); });
+            item.addEventListener("click", function() {
+                var id = gridCtxPendingBtnId;
+                if (!id) { hideGridContextMenu(); return; }
+                var dash = id.indexOf("-");
+                if (dash < 0) { hideGridContextMenu(); return; }
+                var prefix = id.substring(0, dash);
+                var cell = id.substring(dash + 1);
+                var xy = GRID_CELL_XY[cell];
+                if (!xy) { hideGridContextMenu(); return; }
+                var rx = flipGridAxisX(xy[0]);
+                var ry = flipGridAxisY(xy[1]);
+                if (prefix === "anc") {
+                    csInterface.evalScript("$._demak.moveAnchor('" + rx + "','" + ry + "')");
+                } else if (prefix === "ali") {
+                    csInterface.evalScript("$._demak.alignLayer('" + rx + "','" + ry + "')");
+                }
+                hideGridContextMenu();
+            });
+            gridCtxMenuEl.appendChild(item);
+            return gridCtxMenuEl;
+        }
+
+        function showGridContextMenu(e, btnId) {
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            hideGridContextMenu();
+            hideCurveGraphContextMenu();
+            gridCtxPendingBtnId = btnId;
+            var menu = ensureGridContextMenu();
+            var host = document.getElementById("curvase-app") || document.body;
+            if (menu.parentNode !== host) host.appendChild(menu);
+            var br = host.getBoundingClientRect();
+            menu.style.position = "absolute";
+            menu.style.display = "block";
+            var lx = e.clientX - br.left + (host.scrollLeft || 0);
+            var ly = e.clientY - br.top + (host.scrollTop || 0);
+            menu.style.left = lx + "px";
+            menu.style.top = ly + "px";
+            gridCtxOutsideClose = function(ev) {
+                if (gridCtxMenuEl && gridCtxMenuEl.contains(ev.target)) return;
+                hideGridContextMenu();
+            };
+            document.addEventListener("mousedown", gridCtxOutsideClose, true);
+        }
+
+        (function bindGridReverseMenusDelegated() {
+            var vt = document.getElementById("view-tools");
+            if (!vt) return;
+
+            function gridBtnFromTarget(t) {
+                while (t && t !== vt) {
+                    if (t.classList && t.classList.contains("grid-btn")) return t;
+                    t = t.parentElement;
+                }
+                return null;
+            }
+
+            vt.addEventListener("mousedown", function(ev) {
+                if (ev.button !== 2) return;
+                var btn = gridBtnFromTarget(ev.target);
+                if (!btn) return;
+                ev.preventDefault();
+                ev.stopPropagation();
+                gridCtxLastPointerOpenMs = Date.now();
+                showGridContextMenu(ev, btn.id);
+            }, true);
+
+            vt.addEventListener("contextmenu", function(ev) {
+                var btn = gridBtnFromTarget(ev.target);
+                if (!btn) return;
+                ev.preventDefault();
+                ev.stopPropagation();
+                if (Date.now() - gridCtxLastPointerOpenMs < 600) return;
+                showGridContextMenu(ev, btn.id);
+            });
+        })();
 
         function getCompRatio() {
             var ratioEl = document.getElementById("tool-comp-ratio");
@@ -997,6 +1155,200 @@ var curvaseApp = (function() {
             if (btnApply) animClass(btnApply, "success", 980);
             animClass(document.getElementById("canvas-container"), "pulse", 900);
         };
+
+        function applyEaseRelativeFromCurveMenu() {
+            var segs = editor.getSegments();
+            var mids = editor.getMidPoints();
+            var segsJson, midsJson;
+            try {
+                segsJson = JSON.stringify(segs);
+                midsJson = JSON.stringify(mids);
+                if (!segsJson || segsJson.indexOf("null") !== -1 || segsJson.indexOf("undefined") !== -1) throw new Error("bad segs");
+            } catch (relErr) {
+                showToast("Curve data is invalid.", "error");
+                return;
+            }
+            csInterface.evalScript(
+                "$._curvase.applySegmentsEase('" + segsJson + "','" + midsJson + "','relative',true)",
+                function(result) {
+                    var msg = (result && String(result).trim()) ? String(result).trim() : "";
+                    var looksErr = /^Error/i.test(msg) || /^No /i.test(msg);
+                    showToast(msg, looksErr ? "error" : (msg ? "success" : "info"));
+                }
+            );
+        }
+
+        function fmtCurveNum(n) {
+            if (!isFinite(n)) return "0";
+            var r = Math.round(n * 1000) / 1000;
+            return (Math.abs(r - (r | 0)) < 1e-9) ? String(r | 0) : String(r);
+        }
+
+        function copyCurvePlain(text) {
+            try {
+                var ta = document.createElement("textarea");
+                ta.value = text;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                ta.style.left = "-9999px";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+            } catch (cx) {}
+        }
+
+        function copyCurveAsCssBezier() {
+            var v = editor.getValues();
+            var s = "cubic-bezier(" + fmtCurveNum(v[0]) + ", " + fmtCurveNum(v[1]) + ", " + fmtCurveNum(v[2]) + ", " + fmtCurveNum(v[3]) + ")";
+            copyCurvePlain(s);
+            showToast("Copied CSS cubic-bezier()", "success");
+        }
+
+        function copyCurveAsFourNums() {
+            var v = editor.getValues();
+            var s = fmtCurveNum(v[0]) + ", " + fmtCurveNum(v[1]) + ", " + fmtCurveNum(v[2]) + ", " + fmtCurveNum(v[3]);
+            copyCurvePlain(s);
+            showToast("Copied four numbers", "success");
+        }
+
+        function copyCurveAsJsonSegs() {
+            copyCurvePlain(JSON.stringify(editor.getSegments()));
+            showToast("Copied JSON segments", "success");
+        }
+
+        function ensureCurveGraphContextMenu() {
+            if (curveGraphCtxEl) return curveGraphCtxEl;
+
+            function sep(parent) {
+                var hr = document.createElement("div");
+                hr.className = "ae-graph-ctx-sep";
+                parent.appendChild(hr);
+            }
+
+            function plain(parent, label, fn) {
+                var b = document.createElement("button");
+                b.type = "button";
+                b.className = "ae-graph-ctx-item";
+                b.textContent = label;
+                b.addEventListener("mousedown", function(ev) { ev.stopPropagation(); });
+                b.addEventListener("click", function() {
+                    hideCurveGraphContextMenu();
+                    fn();
+                });
+                parent.appendChild(b);
+            }
+
+            function flyout(parent, label, items) {
+                var wrap = document.createElement("div");
+                wrap.className = "ae-graph-ctx-flyout-wrap";
+                var row = document.createElement("button");
+                row.type = "button";
+                row.className = "ae-graph-ctx-item ae-graph-ctx-item--fly";
+                row.innerHTML = "<span>" + label + '</span><span class="ae-graph-ctx-chevron">\u25B8</span>';
+                row.addEventListener("mousedown", function(ev) { ev.stopPropagation(); });
+                var panel = document.createElement("div");
+                panel.className = "ae-graph-ctx-flyout-panel";
+                for (var fi = 0; fi < items.length; fi++) {
+                    (function(it) {
+                        var ib = document.createElement("button");
+                        ib.type = "button";
+                        ib.className = "ae-graph-ctx-item ae-graph-ctx-item--flychild";
+                        ib.textContent = it.label;
+                        ib.addEventListener("mousedown", function(ev) { ev.stopPropagation(); });
+                        ib.addEventListener("click", function() {
+                            hideCurveGraphContextMenu();
+                            it.fn();
+                        });
+                        panel.appendChild(ib);
+                    })(items[fi]);
+                }
+                wrap.appendChild(row);
+                wrap.appendChild(panel);
+                wrap.addEventListener("mouseenter", function() { panel.style.display = "block"; });
+                wrap.addEventListener("mouseleave", function() { panel.style.display = "none"; });
+                parent.appendChild(wrap);
+            }
+
+            curveGraphCtxEl = document.createElement("div");
+            curveGraphCtxEl.className = "ae-graph-ctx-menu";
+            curveGraphCtxEl.style.display = "none";
+
+            plain(curveGraphCtxEl, "Apply", function() {
+                applyEaseToHost(null, null);
+            });
+
+            flyout(curveGraphCtxEl, "Apply to keys", [
+                { label: "Ease only", fn: function() { applyEaseToHost(null, null); } },
+                { label: "Reflect inner keys (relative)", fn: applyEaseRelativeFromCurveMenu }
+            ]);
+
+            plain(curveGraphCtxEl, "Apply to expression", function() {
+                showToast("Expressions use AE syntax — use Apply for timeline easing.", "info");
+            });
+
+            sep(curveGraphCtxEl);
+
+            plain(curveGraphCtxEl, "Reverse value", function() {
+                if (editor.reverseBezierHandles && editor.reverseBezierHandles()) {
+                    syncInputs();
+                    showToast("Bezier handles reversed.", "success");
+                }
+            });
+
+            sep(curveGraphCtxEl);
+
+            flyout(curveGraphCtxEl, "Copy value as", [
+                { label: "CSS cubic-bezier()", fn: copyCurveAsCssBezier },
+                { label: "Four numbers", fn: copyCurveAsFourNums },
+                { label: "JSON segments", fn: copyCurveAsJsonSegs }
+            ]);
+
+            return curveGraphCtxEl;
+        }
+
+        function showCurveGraphContextMenu(ev) {
+            if (ev.preventDefault) ev.preventDefault();
+            if (ev.stopPropagation) ev.stopPropagation();
+            hideGridContextMenu();
+            hideCurveGraphContextMenu();
+            var menu = ensureCurveGraphContextMenu();
+            var host = document.getElementById("curvase-app") || document.body;
+            if (menu.parentNode !== host) host.appendChild(menu);
+            var br = host.getBoundingClientRect();
+            menu.style.display = "block";
+            menu.style.position = "absolute";
+            var lx = ev.clientX - br.left + (host.scrollLeft || 0);
+            var ly = ev.clientY - br.top + (host.scrollTop || 0);
+            menu.style.left = lx + "px";
+            menu.style.top = ly + "px";
+            curveGraphOutsideClose = function(e2) {
+                if (curveGraphCtxEl && curveGraphCtxEl.contains(e2.target)) return;
+                hideCurveGraphContextMenu();
+            };
+            document.addEventListener("mousedown", curveGraphOutsideClose, true);
+        }
+
+        (function bindCurveGraphContextMenu() {
+            var cvWrap = document.getElementById("canvas-container");
+            if (!cvWrap) return;
+
+            cvWrap.addEventListener("mousedown", function(ev) {
+                if (ev.button !== 2) return;
+                curveGraphLastRmbMs = Date.now();
+                ev.preventDefault();
+                ev.stopPropagation();
+                showCurveGraphContextMenu(ev);
+            }, true);
+
+            cvWrap.addEventListener("contextmenu", function(ev) {
+                if (ev.preventDefault) ev.preventDefault();
+                ev.stopPropagation();
+                if (Date.now() - curveGraphLastRmbMs < 600) return;
+                showCurveGraphContextMenu(ev);
+            }, false);
+        })();
 
         document.getElementById("btn-apply").onclick = function(e) {
             applyEaseToHost(this, e);
