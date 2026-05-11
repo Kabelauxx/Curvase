@@ -16,7 +16,7 @@ An Adobe After Effects extension for interactive Bezier easing curve editing. Cu
 ## Compatibility
 
 - Adobe After Effects 2020 (v17.0) or Newer
-- CEP 11 (CSXS 9.0)
+- CEP 9 (CSXS 9.0)
 
 ## Installation
 
