@@ -23,9 +23,7 @@ An Adobe After Effects extension for interactive Bezier easing curve editing. Cu
 1. Copy the `curvase-extensions` folder to your CEP extensions directory:
    - **Windows:** `C:\Program Files (x86)\Common Files\Adobe\CEP\extensions`
    - **macOS:** `~/Library/Application Support/Adobe/CEP/extensions/`
-2. Enable unsigned extensions for development by setting `PlayerDebugMode` to `1`:
-   - **Windows:** Registry key `HKEY_CURRENT_USER\Software\Adobe\CSXS.11` → `PlayerDebugMode` = `1`
-   - **macOS:** `defaults write com.adobe.CSXS.11 PlayerDebugMode 1`
+2. Open PlayerDebugMode.reg file
 3. Restart After Effects.
 4. Open the panel from **Window → Extensions → Curvase**.
 
