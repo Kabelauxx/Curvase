@@ -3,6 +3,7 @@ var curvaseApp = (function() {
     var csInterface, editor;
 
     var sel = {ci: -1, pi: -1};
+    var drag = null;
 
     var categories = [
         { name: "Standard", open: true, items: [
@@ -163,7 +164,7 @@ var curvaseApp = (function() {
                 var omx = 1 - x2;
                 y2 = (Math.abs(avg) > 1e-12 && omx > 1e-12)
                     ? 1 - (Number(inE.speed) / avg) * omx
-                    : x2;
+                    : 1;
             }
 
             ax1 += x1 * w;
@@ -231,18 +232,39 @@ var curvaseApp = (function() {
 
         var toastEl = document.getElementById("status-toast");
         var toastTimer = null;
+        var toastQueue = [];
+        var toastActive = false;
         function showToast(message, variant) {
             if (!toastEl || !message) return;
-            toastEl.textContent = message;
-            toastEl.classList.remove("is-error", "is-info", "is-success");
-            if (variant === "error") toastEl.classList.add("is-error");
-            else if (variant === "info") toastEl.classList.add("is-info");
-            else if (variant === "success") toastEl.classList.add("is-success");
-            toastEl.classList.add("is-visible");
-            if (toastTimer) clearTimeout(toastTimer);
-            toastTimer = setTimeout(function() {
+            toastQueue.push({ message: message, variant: variant });
+            processToastQueue();
+        }
+        function processToastQueue() {
+            if (toastActive || toastQueue.length === 0) return;
+            toastActive = true;
+            var current = toastQueue.shift();
+            function displayNext() {
+                toastEl.textContent = current.message;
+                toastEl.classList.remove("is-error", "is-info", "is-success");
+                if (current.variant === "error") toastEl.classList.add("is-error");
+                else if (current.variant === "info") toastEl.classList.add("is-info");
+                else if (current.variant === "success") toastEl.classList.add("is-success");
+                toastEl.classList.add("is-visible");
+                if (toastTimer) clearTimeout(toastTimer);
+                toastTimer = setTimeout(function() {
+                    toastEl.classList.remove("is-visible");
+                    setTimeout(function() {
+                        toastActive = false;
+                        processToastQueue();
+                    }, 300);
+                }, 3000);
+            }
+            if (toastEl.classList.contains("is-visible")) {
                 toastEl.classList.remove("is-visible");
-            }, 3400);
+                setTimeout(displayNext, 250);
+            } else {
+                displayNext();
+            }
         }
 
         var curveGraphCtxEl = null;
@@ -343,7 +365,8 @@ var curvaseApp = (function() {
         var viewTools = document.getElementById("view-tools");
         var isToolsMode = false;
 
-        var inspectorInterval = null;
+        var inspectorTimeout = null;
+        var isInspecting = false;
 
         var INSP_PROPS = [
             { mn: "ADBE Position",    label: "Position",    dims: 3, dl: ["X","Y","Z"] },
@@ -427,7 +450,12 @@ var curvaseApp = (function() {
                                 );
                             });
 
-                            inp.addEventListener("keydown", function(e) { e.stopPropagation(); });
+                            inp.addEventListener("keydown", function(e) {
+                                e.stopPropagation();
+                                if (e.key === "Enter") {
+                                    this.blur();
+                                }
+                            });
 
                             wrap.appendChild(inp);
                             fields.appendChild(wrap);
@@ -463,16 +491,30 @@ var curvaseApp = (function() {
         }
 
         function startInspector() {
-            if (inspectorInterval) return;
-            inspectorInterval = setInterval(function() {
-                csInterface.evalScript("$._curvase.getLayerProps()", function(res) {
-                    try { renderInspector(JSON.parse(res)); } catch(e) { renderInspector(null); }
-                });
-            }, 200);
+            if (isInspecting) return;
+            isInspecting = true;
+            pollInspector();
+        }
+
+        function pollInspector() {
+            if (!isInspecting) return;
+            csInterface.evalScript("$._curvase.getLayerProps()", function(res) {
+                if (!isInspecting) return;
+                try {
+                    renderInspector(JSON.parse(res));
+                } catch(e) {
+                    renderInspector(null);
+                }
+                inspectorTimeout = setTimeout(pollInspector, 350);
+            });
         }
 
         function stopInspector() {
-            if (inspectorInterval) { clearInterval(inspectorInterval); inspectorInterval = null; }
+            isInspecting = false;
+            if (inspectorTimeout) {
+                clearTimeout(inspectorTimeout);
+                inspectorTimeout = null;
+            }
             var rows = document.getElementById("inspector-rows");
             if (rows) { rows.innerHTML = ""; rows.dataset.layer = ""; }
             var nameEl = document.getElementById("inspector-layer-name");
@@ -480,221 +522,27 @@ var curvaseApp = (function() {
         }
 
         var modeBadge = document.getElementById("header-mode-badge");
-        var themeModal = document.getElementById("theme-modal");
-        var themeInputs = [];
-        var THEME_KEY = "curvase_theme_v1";
-        var THEME_DEFAULT = {
-            "--bg": "#1a1a1a",
-            "--surface": "#222222",
-            "--surface2": "#2a2a2a",
-            "--border": "#333333",
-            "--border2": "#3d3d3d",
-            "--text": "#e0e0e0",
-            "--text-dim": "#888888",
-            "--text-mute": "#555555",
-            "--accent": "#ffffff",
-            "--accent2": "#ff8c42",
-            "--blue": "#4a9eff",
-            "--white": "#ffffff",
-            "--graph-inner-bg": "#000000",
-            "--graph-grid": "#ffffff",
-            "--graph-box-border": "#ffffff",
-            "--graph-diagonal": "#ffffff",
-            "--graph-canvas-bg": "#181818",
-            "--curve-main": "#00d4aa",
-            "--curve-endpoint": "#777777",
-            "--curve-handle-out": "#ff8c42",
-            "--curve-handle-in": "#4a9eff"
-        };
-        var THEME_PRESETS = {
-            "default": THEME_DEFAULT,
-            "ocean": {
-                "--bg": "#0f1b24",
-                "--surface": "#122632",
-                "--surface2": "#16313f",
-                "--border": "#24495d",
-                "--border2": "#2d5f79",
-                "--text": "#ddf4ff",
-                "--text-dim": "#95c7dc",
-                "--text-mute": "#5c889b",
-                "--accent": "#7df4ff",
-                "--accent2": "#00e0a4",
-                "--blue": "#5fb9ff",
-                "--white": "#f2feff",
-                "--graph-inner-bg": "#03131c",
-                "--graph-grid": "#7ecde4",
-                "--graph-box-border": "#b5f6ff",
-                "--graph-diagonal": "#7ecde4",
-                "--graph-canvas-bg": "#081a22",
-                "--curve-main": "#3dffd7",
-                "--curve-endpoint": "#95d8e8",
-                "--curve-handle-out": "#49f2bf",
-                "--curve-handle-in": "#5fb9ff"
-            },
-            "violet": {
-                "--bg": "#191523",
-                "--surface": "#231d30",
-                "--surface2": "#2c2440",
-                "--border": "#3d3158",
-                "--border2": "#4e3d73",
-                "--text": "#efe9ff",
-                "--text-dim": "#bcaedd",
-                "--text-mute": "#7f719f",
-                "--accent": "#cdb7ff",
-                "--accent2": "#ff8dd9",
-                "--blue": "#8ab4ff",
-                "--white": "#ffffff",
-                "--graph-inner-bg": "#0f0b1a",
-                "--graph-grid": "#d5c4ff",
-                "--graph-box-border": "#f0e9ff",
-                "--graph-diagonal": "#cdb7ff",
-                "--graph-canvas-bg": "#161026",
-                "--curve-main": "#cdb7ff",
-                "--curve-endpoint": "#b9a8d7",
-                "--curve-handle-out": "#ff8dd9",
-                "--curve-handle-in": "#8ab4ff"
-            }
-        };
+        var navTabCurve = document.getElementById("nav-tab-curve");
+        var navTabTools = document.getElementById("nav-tab-tools");
 
-        function rgbToHex(rgb) {
-            if (!rgb) return "#000000";
-            if (rgb.charAt(0) === "#") return rgb;
-            var m = rgb.match(/\d+/g);
-            if (!m || m.length < 3) return "#000000";
-            var r = parseInt(m[0], 10), g = parseInt(m[1], 10), b = parseInt(m[2], 10);
-            function h(n) { var s = n.toString(16); return s.length < 2 ? "0" + s : s; }
-            return "#" + h(r) + h(g) + h(b);
-        }
-
-        function getThemeFromCss() {
-            var out = {};
-            var cs = getComputedStyle(document.documentElement);
-            for (var key in THEME_DEFAULT) {
-                if (!Object.prototype.hasOwnProperty.call(THEME_DEFAULT, key)) continue;
-                var raw = (cs.getPropertyValue(key) || "").trim();
-                if (key === "--graph-inner-bg") {
-                    out[key] = rgbToHex(raw);
-                } else if (key === "--graph-grid" || key === "--graph-box-border" || key === "--graph-diagonal") {
-                    out[key] = rgbToHex(raw);
-                } else {
-                    out[key] = rgbToHex(raw);
-                }
-            }
-            return out;
-        }
-
-        function applyTheme(themeObj) {
-            if (!themeObj) return;
-            for (var key in THEME_DEFAULT) {
-                if (!Object.prototype.hasOwnProperty.call(THEME_DEFAULT, key)) continue;
-                var val = themeObj[key];
-                if (typeof val === "string" && val) {
-                    document.documentElement.style.setProperty(key, val);
-                }
-            }
-        }
-
-        function saveTheme(themeObj) {
-            try { localStorage.setItem(THEME_KEY, JSON.stringify(themeObj)); } catch (e) {}
-        }
-
-        function refreshThemeInputs() {
-            var current = getThemeFromCss();
-            for (var i = 0; i < themeInputs.length; i++) {
-                var inp = themeInputs[i];
-                var key = inp.getAttribute("data-theme-var");
-                if (key && current[key]) inp.value = current[key];
-            }
-        }
-
-        function openThemeModal() {
-            if (!themeModal) return;
-            refreshThemeInputs();
-            themeModal.classList.remove("modal-closing");
-            themeModal.classList.add("modal-open");
-        }
-
-        function closeThemeModal() {
-            if (!themeModal || !themeModal.classList.contains("modal-open")) return;
-            themeModal.classList.add("modal-closing");
-            setTimeout(function() {
-                themeModal.classList.remove("modal-open", "modal-closing");
-            }, 150);
-        }
-
-        (function initThemeEditor() {
-            var saved = null;
-            try { saved = JSON.parse(localStorage.getItem(THEME_KEY) || "null"); } catch (e) {}
-            applyTheme(saved || THEME_DEFAULT);
-
-            if (modeBadge) {
-                modeBadge.title = "Click to edit Curvase theme";
-                modeBadge.addEventListener("click", function() {
-                    openThemeModal();
-                });
-            }
-
-            var themeGrid = document.getElementById("theme-grid");
-            if (themeGrid) {
-                themeInputs = Array.prototype.slice.call(themeGrid.querySelectorAll("input[data-theme-var]"));
-                themeInputs.forEach(function(inp) {
-                    inp.addEventListener("input", function() {
-                        var key = inp.getAttribute("data-theme-var");
-                        if (!key) return;
-                        document.documentElement.style.setProperty(key, inp.value);
-                        saveTheme(getThemeFromCss());
-                    });
-                });
-            }
-
-            var presetWrap = document.getElementById("theme-presets");
-            if (presetWrap) {
-                presetWrap.addEventListener("click", function(e) {
-                    var btn = e.target;
-                    if (!btn || !btn.getAttribute) return;
-                    var presetName = btn.getAttribute("data-theme-preset");
-                    if (!presetName || !THEME_PRESETS[presetName]) return;
-                    applyTheme(THEME_PRESETS[presetName]);
-                    saveTheme(getThemeFromCss());
-                    refreshThemeInputs();
-                    showToast("Theme preset: " + presetName, "success");
-                });
-            }
-
-            var btnResetTheme = document.getElementById("btn-theme-reset");
-            if (btnResetTheme) {
-                btnResetTheme.onclick = function() {
-                    applyTheme(THEME_DEFAULT);
-                    saveTheme(getThemeFromCss());
-                    refreshThemeInputs();
-                    showToast("Theme reset to default.", "info");
-                };
-            }
-
-            var btnCloseTheme = document.getElementById("btn-theme-close");
-            if (btnCloseTheme) btnCloseTheme.onclick = closeThemeModal;
-
-            if (themeModal) {
-                themeModal.addEventListener("click", function(e) {
-                    if (e.target === themeModal) closeThemeModal();
-                });
-            }
-        })();
-        btnMode.onclick = function() {
-            isToolsMode = !isToolsMode;
+        function switchView(toolsMode) {
+            if (isToolsMode === toolsMode) return;
+            isToolsMode = toolsMode;
             var from = isToolsMode ? viewCurve : viewTools;
             var to   = isToolsMode ? viewTools  : viewCurve;
-            animClass(btnMode, "brand-pop", 560);
+
+            if (navTabCurve) navTabCurve.classList.toggle("active", !isToolsMode);
+            if (navTabTools) navTabTools.classList.toggle("active", isToolsMode);
+
             if (modeBadge) {
                 modeBadge.textContent = isToolsMode ? "Tools" : "Curve";
                 modeBadge.classList.toggle("mode-badge--tools", isToolsMode);
-                animClass(modeBadge, "mode-badge--pop", 680);
             }
             from.classList.add("view-exit");
             setTimeout(function() {
                 from.style.display = "none";
                 from.classList.remove("view-exit");
-                to.style.display = isToolsMode ? "flex" : "flex";
+                to.style.display = "flex";
                 to.classList.add("view-enter");
 
                 if (isToolsMode) {
@@ -710,7 +558,68 @@ var curvaseApp = (function() {
             }, 300);
             btnMode.classList.toggle("tools-active", isToolsMode);
             isToolsMode ? startInspector() : stopInspector();
+        }
+
+        if (navTabCurve) navTabCurve.onclick = function() { switchView(false); };
+        if (navTabTools) navTabTools.onclick = function() { switchView(true); };
+
+        btnMode.onclick = function() {
+            switchView(!isToolsMode);
+            animClass(btnMode, "brand-pop", 560);
         };
+
+        (function initSettingsDrawer() {
+            var drawer = document.getElementById("settings-drawer");
+            var toggleBtn = document.getElementById("btn-settings-toggle");
+            var closeBtn = document.getElementById("btn-settings-close");
+
+            if (toggleBtn && drawer) {
+                toggleBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    drawer.classList.toggle("open");
+                };
+            }
+            if (closeBtn && drawer) {
+                closeBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    drawer.classList.remove("open");
+                };
+            }
+            document.addEventListener("mousedown", function(e) {
+                if (drawer && drawer.classList.contains("open")) {
+                    if (!drawer.contains(e.target) && !toggleBtn.contains(e.target)) {
+                        drawer.classList.remove("open");
+                    }
+                }
+            });
+
+            function syncToggleLabel(btn) {
+                if (!btn) return;
+                var isActive = btn.classList.contains("active") || btn.classList.contains("active--radial");
+                if (btn.id === "btn-bg") {
+                    btn.textContent = (editor && editor.bgVideoElement) ? "Loaded" : "Select";
+                } else {
+                    btn.textContent = isActive ? "On" : "Off";
+                }
+            }
+
+            var toggles = document.querySelectorAll(".toggle-switch-btn");
+            toggles.forEach(function(t) {
+                syncToggleLabel(t);
+                t.addEventListener("click", function() {
+                    var self = this;
+                    setTimeout(function() { syncToggleLabel(self); }, 40);
+                });
+            });
+
+            var bgFileInput = document.getElementById("bg-file-input");
+            if (bgFileInput) {
+                bgFileInput.addEventListener("change", function() {
+                    var btnBg = document.getElementById("btn-bg");
+                    setTimeout(function() { syncToggleLabel(btnBg); }, 150);
+                });
+            }
+        })();
 
         function bindDemakBtn(id, scriptStr) {
             var el = document.getElementById(id);
@@ -936,39 +845,126 @@ var curvaseApp = (function() {
             e.stopPropagation();
         });
 
-        document.getElementById("btn-save-preset").onclick = function() {
-            var n = prompt("Preset name:", "Custom");
-            if (!n) return;
+        var savePresetModal = document.getElementById("save-preset-modal");
+        var savePresetNameEl = document.getElementById("save-preset-name");
+        var savePresetCatEl = document.getElementById("save-preset-cat");
+        var savePresetNewCatEl = document.getElementById("save-preset-newcat");
 
-            var catNames = categories.map(function(c) { return c.name; });
-            var catPrompt = "Category (number):\n" + catNames.map(function(c, i) { return (i+1) + ". " + c; }).join("\n") + "\n" + (catNames.length+1) + ". New category…";
-            var choice = parseInt(prompt(catPrompt, "1"), 10);
-            if (isNaN(choice)) return;
+        function openSavePresetModal() {
+            savePresetNameEl.value = "";
+            savePresetNewCatEl.value = "";
+            savePresetNewCatEl.style.display = "none";
+            savePresetCatEl.innerHTML = "";
+            for (var ci = 0; ci < categories.length; ci++) {
+                var opt = document.createElement("option");
+                opt.value = String(ci);
+                opt.textContent = categories[ci].name;
+                savePresetCatEl.appendChild(opt);
+            }
+            var newOpt = document.createElement("option");
+            newOpt.value = "new";
+            newOpt.textContent = "New category…";
+            savePresetCatEl.appendChild(newOpt);
+            savePresetModal.classList.remove("modal-closing");
+            savePresetModal.classList.add("modal-open");
+            setTimeout(function() { savePresetNameEl.focus(); }, 60);
+        }
+
+        function closeSavePresetModal() {
+            savePresetModal.classList.add("modal-closing");
+            setTimeout(function() {
+                savePresetModal.classList.remove("modal-open", "modal-closing");
+            }, 150);
+        }
+
+        savePresetCatEl.onchange = function() {
+            savePresetNewCatEl.style.display = this.value === "new" ? "block" : "none";
+        };
+
+        savePresetModal.addEventListener("click", function(e) {
+            if (e.target === savePresetModal) closeSavePresetModal();
+        });
+
+        document.getElementById("btn-save-preset-cancel").onclick = closeSavePresetModal;
+
+        savePresetNameEl.addEventListener("keydown", function(e) {
+            e.stopPropagation();
+            if (e.key === "Enter") document.getElementById("btn-save-preset-confirm").click();
+        });
+        savePresetNewCatEl.addEventListener("keydown", function(e) {
+            e.stopPropagation();
+            if (e.key === "Enter") document.getElementById("btn-save-preset-confirm").click();
+        });
+
+        document.getElementById("btn-save-preset-confirm").onclick = function() {
+            var name = savePresetNameEl.value.trim();
+            if (!name) { showToast("Enter a preset name.", "error"); return; }
+            var catIdx = savePresetCatEl.value;
             var targetCat;
-            if (choice === catNames.length + 1) {
-                var newName = prompt("New category name:", "My Presets");
-                if (!newName) return;
+            if (catIdx === "new") {
+                var newName = savePresetNewCatEl.value.trim();
+                if (!newName) { showToast("Enter a category name.", "error"); return; }
                 targetCat = { name: newName, open: true, items: [] };
                 categories.push(targetCat);
             } else {
-                targetCat = categories[Math.max(0, Math.min(categories.length - 1, choice - 1))];
+                targetCat = categories[parseInt(catIdx, 10)];
             }
+            if (!targetCat) { showToast("Invalid category.", "error"); return; }
             var v = editor.getValues();
-            targetCat.items.push({ name: n, x1: v[0], y1: v[1], x2: v[2], y2: v[3] });
+            targetCat.items.push({ name: name, x1: v[0], y1: v[1], x2: v[2], y2: v[3] });
             saveData();
-            render();
+            scheduleRender();
+            closeSavePresetModal();
+            showToast("Preset \"" + name + "\" saved.", "success");
         };
+
+        document.getElementById("btn-save-preset").onclick = openSavePresetModal;
 
         document.getElementById("btn-delete-selected").onclick = function() {
             if (sel.ci === -1) return;
-            if (sel.pi === -1) {
-                if (!confirm('Delete category "' + categories[sel.ci].name + '" and all its presets?')) return;
-                categories.splice(sel.ci, 1);
+            if (sel.ci === 0) {
+                if (sel.pi === -1) {
+                    showToast("Cannot delete Favorites category.", "info");
+                    return;
+                }
+                var favItem = favoritesList[sel.pi];
+                if (favItem) {
+                    toggleFavorite(favItem, true);
+                }
             } else {
-                categories[sel.ci].items.splice(sel.pi, 1);
+                var realCatIdx = sel.ci - 1;
+                if (sel.pi === -1) {
+                    var catName = categories[realCatIdx] ? categories[realCatIdx].name : "";
+                    var btn = this;
+                    if (btn.dataset.pendingDelete === catName) {
+                        categories.splice(realCatIdx, 1);
+                        sel = {ci: -1, pi: -1};
+                        saveData();
+                        scheduleRender();
+                        delete btn.dataset.pendingDelete;
+                        showToast("Category deleted.", "info");
+                    } else {
+                        btn.dataset.pendingDelete = catName;
+                        showToast("Click delete again to confirm removing \"" + catName + "\".", "info");
+                        var self = this;
+                        setTimeout(function() { delete self.dataset.pendingDelete; }, 3500);
+                    }
+                    return;
+                } else {
+                    var targetPreset = categories[realCatIdx].items[sel.pi];
+                    if (targetPreset) {
+                        var targetId = getPresetId(targetPreset);
+                        favoritesList = favoritesList.filter(function(fp) {
+                            return getPresetId(fp) !== targetId;
+                        });
+                        saveFavorites();
+                    }
+                    categories[realCatIdx].items.splice(sel.pi, 1);
+                }
             }
             sel = {ci: -1, pi: -1};
-            saveData(); render();
+            saveData();
+            scheduleRender();
         };
 
         document.getElementById("btn-export-preset").onclick = function() {
@@ -1038,6 +1034,10 @@ var curvaseApp = (function() {
                 closeModal();
             } else if (e.key === "Escape" && themeModal && themeModal.classList.contains("modal-open")) {
                 closeThemeModal();
+            } else if (e.key === "Escape" && bounceModal && bounceModal.classList.contains("modal-open")) {
+                closeBounceModal();
+            } else if (e.key === "Escape" && loopModal && loopModal.classList.contains("modal-open")) {
+                closeLoopModal();
             }
         });
 
@@ -1078,6 +1078,7 @@ var curvaseApp = (function() {
         var controlsPanel = document.getElementById("controls");
         var isResizing = false;
         var startY, startHeight;
+        var resizeRafId = 0;
 
         function updatePresetsCollapsedState(heightPx) {
             if (!controlsPanel) return;
@@ -1099,20 +1100,31 @@ var curvaseApp = (function() {
             var dy = e.clientY - startY;
             var newHeight = startHeight - dy;
 
-            if(newHeight < 0) newHeight = 0;
+            if (newHeight < 16) {
+                newHeight = 0;
+            } else if (newHeight < 32) {
+                newHeight = 32;
+            }
 
             var maxH = window.innerHeight - 200;
-            if(newHeight > maxH) newHeight = maxH;
+            if (newHeight > maxH) newHeight = maxH;
 
             presetsPanel.style.height = newHeight + 'px';
             updatePresetsCollapsedState(newHeight);
-            editor.resize();
+
+            if (resizeRafId) cancelAnimationFrame(resizeRafId);
+            resizeRafId = requestAnimationFrame(function() {
+                resizeRafId = 0;
+                editor.resize();
+            });
         });
 
         window.addEventListener('mouseup', function() {
-            if(isResizing) {
+            if (isResizing) {
                 isResizing = false;
                 document.documentElement.style.cursor = 'default';
+                if (resizeRafId) { cancelAnimationFrame(resizeRafId); resizeRafId = 0; }
+                editor.resize();
             }
         });
 
@@ -1120,14 +1132,48 @@ var curvaseApp = (function() {
         document.getElementById("bg-file-input").onchange = function(e) {
             var file = e.target.files[0];
             if (file) {
-                var reader = new FileReader();
-                reader.onload = function(ev) {
-                    var type = file.type.includes("video") ? "video" : "image";
-                    editor.setBackgroundImage(ev.target.result, type);
-                };
-                reader.readAsDataURL(file);
+                var audioControls = document.getElementById('audio-controls');
+                if (file.type.startsWith('video/')) {
+                    if (audioControls) audioControls.classList.add('show-audio');
+                    var reader = new FileReader();
+                    reader.onload = function(ev) {
+                        editor.setBackgroundImage(ev.target.result, "video");
+                        setTimeout(function() {
+                            if (editor.bgVideoElement) {
+                                editor.bgVideoElement.muted = false;
+                                editor.bgVideoElement.play();
+                            }
+                        }, 300);
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    if (audioControls) audioControls.classList.remove('show-audio');
+                    var reader = new FileReader();
+                    reader.onload = function(ev) {
+                        editor.setBackgroundImage(ev.target.result, "image");
+                    };
+                    reader.readAsDataURL(file);
+                }
             }
         };
+
+        var btnMute = document.getElementById("btn-mute");
+        if (btnMute) {
+            btnMute.onclick = function() {
+                var isMuted = editor.toggleMute();
+                this.textContent = isMuted ? "🔈" : "🔊";
+            };
+        }
+
+        var volumeSlider = document.getElementById("volume-slider");
+        if (volumeSlider) {
+            volumeSlider.oninput = function() {
+                editor.setVolume(parseFloat(this.value));
+                if (btnMute) {
+                    btnMute.textContent = parseFloat(this.value) === 0 ? "🔈" : "🔊";
+                }
+            };
+        }
 
         (function initSpectrum() {
             var btnSpectrum = document.getElementById("btn-spectrum");
@@ -1342,15 +1388,23 @@ var curvaseApp = (function() {
             try {
                 segsJson = JSON.stringify(segs);
                 midsJson = JSON.stringify(mids);
-                if (!segsJson || segsJson.indexOf("null") !== -1 || segsJson.indexOf("undefined") !== -1) throw new Error("bad segs");
+                if (!segsJson || !segs.length) throw new Error("empty segs");
+                for (var _si = 0; _si < segs.length; _si++) {
+                    var _s = segs[_si];
+                    if (!isFinite(_s.x1) || !isFinite(_s.y1) || !isFinite(_s.x2) || !isFinite(_s.y2)) {
+                        throw new Error("non-finite segment");
+                    }
+                }
             } catch (serErr) {
                 showToast("Curve data is invalid. Reset the curve and try again.", "error");
                 return;
             }
 
+            if (btnApply) btnApply.classList.add("is-processing");
             csInterface.evalScript(
                 "$._curvase.applySegmentsEase('" + segsJson + "','" + midsJson + "',null,true)",
                 function(result) {
+                    if (btnApply) btnApply.classList.remove("is-processing");
                     var msg = (result && String(result).trim()) ? String(result).trim() : "";
                     var looksErr = /^Error/i.test(msg) || /^No /i.test(msg);
                     if (looksErr) {
@@ -1374,7 +1428,13 @@ var curvaseApp = (function() {
             try {
                 segsJson = JSON.stringify(segs);
                 midsJson = JSON.stringify(mids);
-                if (!segsJson || segsJson.indexOf("null") !== -1 || segsJson.indexOf("undefined") !== -1) throw new Error("bad segs");
+                if (!segsJson || !segs.length) throw new Error("empty segs");
+                for (var _si = 0; _si < segs.length; _si++) {
+                    var _s = segs[_si];
+                    if (!isFinite(_s.x1) || !isFinite(_s.y1) || !isFinite(_s.x2) || !isFinite(_s.y2)) {
+                        throw new Error("non-finite segment");
+                    }
+                }
             } catch (relErr) {
                 showToast("Curve data is invalid.", "error");
                 return;
@@ -1561,11 +1621,349 @@ var curvaseApp = (function() {
             }, false);
         })();
 
+        document.getElementById("btn-match-vel").onclick = function(e) {
+            addRipple(this, e);
+            csInterface.evalScript("$._curvase.matchVelocity()", function(result) {
+                var msg = (result && String(result).trim()) ? String(result).trim() : "";
+                var looksErr = /^Error/i.test(msg) || /^No /i.test(msg);
+                showToast(msg || "Velocity matched.", looksErr ? "error" : "success");
+            });
+        };
+
+        var bounceModal = document.getElementById("bounce-modal");
+        document.getElementById("btn-bounce-gen").onclick = function(e) {
+            addRipple(this, e);
+            bounceModal.classList.remove("modal-closing");
+            bounceModal.classList.add("modal-open");
+        };
+
+        function closeBounceModal() {
+            bounceModal.classList.add("modal-closing");
+            setTimeout(function() {
+                bounceModal.classList.remove("modal-open", "modal-closing");
+            }, 150);
+        }
+
+        bounceModal.addEventListener("click", function(e) {
+            if (e.target === bounceModal) closeBounceModal();
+        });
+
+        document.getElementById("btn-bounce-cancel").onclick = closeBounceModal;
+
+        document.getElementById("btn-bounce-apply").onclick = function() {
+            var amp = parseFloat(document.getElementById("b-amp").value);
+            var freq = parseFloat(document.getElementById("b-freq").value);
+            var decay = parseFloat(document.getElementById("b-decay").value);
+            
+            csInterface.evalScript("$._curvase.generateOvershoot(" + amp + "," + freq + "," + decay + ")", function(result) {
+                var msg = (result && String(result).trim()) ? String(result).trim() : "";
+                var looksErr = /^Error/i.test(msg) || /^No /i.test(msg);
+                showToast(msg || "Overshoot generated.", looksErr ? "error" : "success");
+                if (!looksErr) closeBounceModal();
+            });
+        };
+
+        var loopModal = document.getElementById("loop-modal");
+        document.getElementById("btn-loop-gen").onclick = function(e) {
+            addRipple(this, e);
+            loopModal.classList.remove("modal-closing");
+            loopModal.classList.add("modal-open");
+        };
+
+        function closeLoopModal() {
+            loopModal.classList.add("modal-closing");
+            setTimeout(function() {
+                loopModal.classList.remove("modal-open", "modal-closing");
+            }, 150);
+        }
+
+        loopModal.addEventListener("click", function(e) {
+            if (e.target === loopModal) closeLoopModal();
+        });
+
+        document.getElementById("btn-loop-cancel").onclick = closeLoopModal;
+
+        var THEME_PRESETS = {
+            default: {
+                "--bg": "#141414",
+                "--surface": "#222222",
+                "--surface2": "#2a2a2a",
+                "--border": "#ffffff",
+                "--border2": "#ffffff",
+                "--text": "#f0f0f0",
+                "--text-dim": "#a0a0a0",
+                "--text-mute": "#666666",
+                "--accent": "#ffffff",
+                "--accent2": "#ff8c42",
+                "--blue": "#4a9eff",
+                "--white": "#ffffff",
+                "--graph-inner-bg": "#000000",
+                "--graph-grid": "#ffffff",
+                "--graph-box-border": "#ffffff",
+                "--graph-diagonal": "#ffffff",
+                "--graph-canvas-bg": "#141414",
+                "--curve-main": "#00e5ff",
+                "--curve-endpoint": "#888888",
+                "--curve-handle-out": "#ff9d5c",
+                "--curve-handle-in": "#5bb0ff"
+            },
+            cyberpunk: {
+                "--bg": "#0b0713",
+                "--surface": "#190c28",
+                "--surface2": "#231237",
+                "--border": "#ff007f",
+                "--border2": "#ff007f",
+                "--text": "#ffffff",
+                "--text-dim": "#a39ec4",
+                "--text-mute": "#544f73",
+                "--accent": "#ff007f",
+                "--accent2": "#ffd700",
+                "--blue": "#00f5ff",
+                "--white": "#ffffff",
+                "--graph-inner-bg": "#07040d",
+                "--graph-grid": "#ff007f",
+                "--graph-box-border": "#ff007f",
+                "--graph-diagonal": "#ff007f",
+                "--graph-canvas-bg": "#0b0713",
+                "--curve-main": "#ff007f",
+                "--curve-endpoint": "#ffd700",
+                "--curve-handle-out": "#00f5ff",
+                "--curve-handle-in": "#ffd700"
+            },
+            ae: {
+                "--bg": "#232323",
+                "--surface": "#2d2d2d",
+                "--surface2": "#373737",
+                "--border": "#ffffff",
+                "--border2": "#ffffff",
+                "--text": "#e1e1e1",
+                "--text-dim": "#a8a8a8",
+                "--text-mute": "#626262",
+                "--accent": "#ffffff",
+                "--accent2": "#7caeff",
+                "--blue": "#7caeff",
+                "--white": "#ffffff",
+                "--graph-inner-bg": "#1a1a1a",
+                "--graph-grid": "#ffffff",
+                "--graph-box-border": "#ffffff",
+                "--graph-diagonal": "#ffffff",
+                "--graph-canvas-bg": "#232323",
+                "--curve-main": "#ffffff",
+                "--curve-endpoint": "#626262",
+                "--curve-handle-out": "#7caeff",
+                "--curve-handle-in": "#a8d5ff"
+            },
+            nordic: {
+                "--bg": "#0f131a",
+                "--surface": "#1a202c",
+                "--surface2": "#222a3a",
+                "--border": "#7dd3fc",
+                "--border2": "#7dd3fc",
+                "--text": "#f1f5f9",
+                "--text-dim": "#94a3b8",
+                "--text-mute": "#475569",
+                "--accent": "#7dd3fc",
+                "--accent2": "#c084fc",
+                "--blue": "#a5b4fc",
+                "--white": "#ffffff",
+                "--graph-inner-bg": "#0b0d12",
+                "--graph-grid": "#7dd3fc",
+                "--graph-box-border": "#7dd3fc",
+                "--graph-diagonal": "#7dd3fc",
+                "--graph-canvas-bg": "#0f131a",
+                "--curve-main": "#7dd3fc",
+                "--curve-endpoint": "#475569",
+                "--curve-handle-out": "#c084fc",
+                "--curve-handle-in": "#a5b4fc"
+            },
+            sunset: {
+                "--bg": "#110905",
+                "--surface": "#1e0f08",
+                "--surface2": "#2a160c",
+                "--border": "#ff8c42",
+                "--border2": "#ff8c42",
+                "--text": "#fafaf9",
+                "--text-dim": "#a8a29e",
+                "--text-mute": "#57534e",
+                "--accent": "#ff8c42",
+                "--accent2": "#ffd54f",
+                "--blue": "#f43f5e",
+                "--white": "#ffffff",
+                "--graph-inner-bg": "#0a0503",
+                "--graph-grid": "#ff8c42",
+                "--graph-box-border": "#ff8c42",
+                "--graph-diagonal": "#ff8c42",
+                "--graph-canvas-bg": "#110905",
+                "--curve-main": "#ff8c42",
+                "--curve-endpoint": "#ffd54f",
+                "--curve-handle-out": "#ffd54f",
+                "--curve-handle-in": "#f43f5e"
+            }
+        };
+
+        function hexToRgba(hex, alpha) {
+            var c = hex.substring(1);
+            if (c.length === 3) {
+                c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+            }
+            var r = parseInt(c.substring(0, 2), 16);
+            var g = parseInt(c.substring(2, 4), 16);
+            var b = parseInt(c.substring(4, 6), 16);
+            return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
+        }
+
+        function applyTheme(themeObj) {
+            for (var prop in themeObj) {
+                var val = themeObj[prop];
+                if (typeof val === "string" && val.startsWith("#")) {
+                    if (prop === "--bg") {
+                        val = hexToRgba(val, 0.4);
+                    } else if (prop === "--surface") {
+                        val = hexToRgba(val, 0.4);
+                    } else if (prop === "--surface2") {
+                        val = hexToRgba(val, 0.5);
+                    } else if (prop === "--border") {
+                        val = hexToRgba(val, 0.1);
+                    } else if (prop === "--border2") {
+                        val = hexToRgba(val, 0.18);
+                    } else if (prop === "--graph-inner-bg") {
+                        val = hexToRgba(val, 0.25);
+                    } else if (prop === "--graph-grid") {
+                        val = hexToRgba(val, 0.08);
+                    } else if (prop === "--graph-box-border") {
+                        val = hexToRgba(val, 0.2);
+                    } else if (prop === "--graph-diagonal") {
+                        val = hexToRgba(val, 0.06);
+                    } else if (prop === "--graph-canvas-bg") {
+                        val = hexToRgba(val, 0.25);
+                    }
+                }
+                document.documentElement.style.setProperty(prop, val);
+            }
+            var inputs = document.querySelectorAll("#theme-grid input[type='color']");
+            for (var i = 0; i < inputs.length; i++) {
+                var vName = inputs[i].getAttribute("data-theme-var");
+                if (themeObj[vName]) {
+                    inputs[i].value = themeObj[vName];
+                }
+            }
+            if (editor) {
+                editor._scheduleRender();
+            }
+            var allPresets = [];
+            try { allPresets = favoritesList; } catch(ex) {}
+            for (var _ti = 0; _ti < allPresets.length; _ti++) { delete allPresets[_ti]._thumb; }
+            for (var _ci = 0; _ci < categories.length; _ci++) {
+                var _items = categories[_ci].items || [];
+                for (var _pi = 0; _pi < _items.length; _pi++) { delete _items[_pi]._thumb; }
+            }
+        }
+
+        var themeModal = document.getElementById("theme-modal");
+
+        document.getElementById("btn-theme-selector").onclick = function(e) {
+            addRipple(this, e);
+            themeModal.classList.remove("modal-closing");
+            themeModal.classList.add("modal-open");
+        };
+
+        function closeThemeModal() {
+            themeModal.classList.add("modal-closing");
+            setTimeout(function() {
+                themeModal.classList.remove("modal-open", "modal-closing");
+            }, 150);
+        }
+
+        themeModal.addEventListener("click", function(e) {
+            if (e.target === themeModal) closeThemeModal();
+        });
+
+        document.getElementById("btn-theme-close").onclick = closeThemeModal;
+
+        var presetBtns = document.querySelectorAll(".theme-preset-btn");
+        for (var i = 0; i < presetBtns.length; i++) {
+            presetBtns[i].onclick = function() {
+                for (var j = 0; j < presetBtns.length; j++) {
+                    presetBtns[j].classList.remove("active");
+                }
+                this.classList.add("active");
+                var key = this.getAttribute("data-theme-preset");
+                if (THEME_PRESETS[key]) {
+                    applyTheme(THEME_PRESETS[key]);
+                    localStorage.setItem("curvase-theme-name", key);
+                    localStorage.setItem("curvase-theme-custom", JSON.stringify(THEME_PRESETS[key]));
+                }
+            };
+        }
+
+        var customPickers = document.querySelectorAll("#theme-grid input[type='color']");
+        for (var i = 0; i < customPickers.length; i++) {
+            customPickers[i].oninput = function() {
+                for (var j = 0; j < presetBtns.length; j++) {
+                    presetBtns[j].classList.remove("active");
+                }
+                var vName = this.getAttribute("data-theme-var");
+                var val = this.value;
+                
+                var customObj = {};
+                var savedCustom = localStorage.getItem("curvase-theme-custom");
+                if (savedCustom) {
+                    try { customObj = JSON.parse(savedCustom); } catch(e) {}
+                }
+                customObj[vName] = val;
+                applyTheme(customObj);
+                
+                localStorage.setItem("curvase-theme-name", "custom");
+                localStorage.setItem("curvase-theme-custom", JSON.stringify(customObj));
+            };
+        }
+
+        document.getElementById("btn-theme-reset").onclick = function() {
+            var btnDefault = document.querySelector(".theme-preset-btn[data-theme-preset='default']");
+            if (btnDefault) btnDefault.click();
+        };
+
+        var savedThemeName = localStorage.getItem("curvase-theme-name") || "default";
+        var savedCustomObj = localStorage.getItem("curvase-theme-custom");
+        var activeBtn = document.querySelector(".theme-preset-btn[data-theme-preset='" + savedThemeName + "']");
+        if (activeBtn) activeBtn.classList.add("active");
+        
+        if (savedThemeName === "custom" && savedCustomObj) {
+            try { applyTheme(JSON.parse(savedCustomObj)); } catch(e) {}
+        } else if (THEME_PRESETS[savedThemeName]) {
+            applyTheme(THEME_PRESETS[savedThemeName]);
+        }
+
+        document.getElementById("btn-loop-apply").onclick = function() {
+            var type = document.getElementById("l-type").value;
+            var amp = parseFloat(document.getElementById("l-amp").value);
+            var freq = parseFloat(document.getElementById("l-freq").value);
+            var dur = parseFloat(document.getElementById("l-dur").value);
+            var decay = parseFloat(document.getElementById("l-decay").value);
+            
+            csInterface.evalScript("$._curvase.generateLoop('" + type + "'," + amp + "," + freq + "," + dur + "," + decay + ")", function(result) {
+                var msg = (result && String(result).trim()) ? String(result).trim() : "";
+                var looksErr = /^Error/i.test(msg) || /^No /i.test(msg);
+                showToast(msg || "Loop wave generated successfully.", looksErr ? "error" : "success");
+                if (!looksErr) closeLoopModal();
+            });
+        };
+
+        var btnSymmetry = document.getElementById("btn-symmetry-mode");
+        btnSymmetry.onclick = function() {
+            editor.isSymmetryMode = !editor.isSymmetryMode;
+            this.classList.toggle("active", editor.isSymmetryMode);
+            animClass(this, "pop", 520);
+        };
+
+        var selMorphStyle = document.getElementById("select-morph-style");
+        selMorphStyle.onchange = function() {
+            editor.morphStyle = this.value;
+        };
+
         document.getElementById("btn-apply").onclick = function(e) {
             applyEaseToHost(this, e);
         };
-
-        render();
 
         document.getElementById("btn-undo").onclick = function() { editor.undo(); };
         document.getElementById("btn-redo").onclick = function() { editor.redo(); };
@@ -1599,8 +1997,6 @@ var curvaseApp = (function() {
                         for (var j = 0; j < kfs.length - 1; j++) {
                             var k1 = kfs[j], k2 = kfs[j + 1];
 
-                            if ((k2.index - k1.index) !== 1) continue;
-
                             if (k1.outType === "HOLD" || k2.inType === "HOLD") continue;
 
                             var b = easePairToNormalizedBezier(k1, k2, prop);
@@ -1632,14 +2028,18 @@ var curvaseApp = (function() {
             });
         };
 
-        window.onresize = function() { editor.resize(); };
+        window.addEventListener('resize', function() { editor.resize(); });
 
         window.addEventListener("unload", function() {
             stopInspector();
         });
 
         document.addEventListener("visibilitychange", function() {
-            if (document.hidden) stopInspector();
+            if (document.hidden) {
+                stopInspector();
+            } else if (isToolsMode) {
+                startInspector();
+            }
         });
         ["x1","y1","x2","y2"].forEach(function(id) {
             document.getElementById(id).oninput = function() {
@@ -1647,25 +2047,196 @@ var curvaseApp = (function() {
             };
         });
 
-        var btnMute = document.getElementById("btn-mute");
-        var volSlider = document.getElementById("volume-slider");
+    }
 
-        volSlider.oninput = function() {
-            var vol = parseFloat(this.value);
-            editor.setVolume(vol);
-            if (vol === 0) {
-                btnMute.innerText = "×";
-            } else {
-                btnMute.innerText = "🔊";
+    var favoritesList = [];
+    var favoritesOpen = true;
+
+    function getPresetId(p) {
+        return [
+            Math.round(p.x1 * 1000),
+            Math.round(p.y1 * 1000),
+            Math.round(p.x2 * 1000),
+            Math.round(p.y2 * 1000),
+            p.name.replace(/[^a-zA-Z0-9]/g, "")
+        ].join("_");
+    }
+
+    function saveFavorites() {
+        try {
+            localStorage.setItem("curvase_favorites_v3", JSON.stringify(favoritesList));
+            localStorage.setItem("curvase_favorites_open", JSON.stringify(favoritesOpen));
+        } catch(e) {}
+    }
+
+    function loadFavorites() {
+        var raw = localStorage.getItem("curvase_favorites_v3");
+        if (raw) {
+            try {
+                favoritesList = JSON.parse(raw);
+            } catch(e) {}
+        }
+        if (!Array.isArray(favoritesList)) {
+            favoritesList = [];
+        }
+        var op = localStorage.getItem("curvase_favorites_open");
+        if (op) {
+            try {
+                favoritesOpen = JSON.parse(op);
+            } catch(e) {}
+        }
+    }
+
+    function makeThumb(p) {
+        if (p._thumb) return p._thumb;
+        var c = document.createElement("canvas");
+        c.width = 54; c.height = 40;
+        var ctx = c.getContext("2d");
+        var padX = 6, padY = 6;
+        var cw = c.width - padX*2, ch = c.height - padY*2;
+        var sx = padX, sy = c.height - padY, ex = c.width - padX, ey = padY;
+        var cp1x = sx + p.x1*cw, cp1y = sy - p.y1*ch;
+        var cp2x = sx + p.x2*cw, cp2y = sy - p.y2*ch;
+
+        var accentColor = getComputedStyle(document.documentElement).getPropertyValue("--curve-main").trim() || "#00e5ff";
+        var handleOutColor = getComputedStyle(document.documentElement).getPropertyValue("--curve-handle-out").trim() || "#ff9d5c";
+        var handleInColor = getComputedStyle(document.documentElement).getPropertyValue("--curve-handle-in").trim() || "#5bb0ff";
+        var endpointColor = getComputedStyle(document.documentElement).getPropertyValue("--curve-endpoint").trim() || "#888888";
+
+        ctx.strokeStyle = "rgba(255,255,255,0.2)"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(cp1x,cp1y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(cp2x,cp2y); ctx.stroke();
+
+        ctx.fillStyle = handleOutColor;
+        ctx.beginPath(); ctx.arc(cp1x,cp1y,2,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = handleInColor;
+        ctx.beginPath(); ctx.arc(cp2x,cp2y,2,0,Math.PI*2); ctx.fill();
+
+        ctx.strokeStyle = accentColor; ctx.lineWidth = 1.5;
+        ctx.shadowColor = accentColor; ctx.shadowBlur = 3;
+        ctx.beginPath(); ctx.moveTo(sx,sy); ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,ex,ey); ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        ctx.fillStyle = endpointColor;
+        ctx.beginPath(); ctx.arc(sx,sy,1.5,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex,ey,1.5,0,Math.PI*2); ctx.fill();
+        p._thumb = c.toDataURL();
+        return p._thumb;
+    }
+
+    function toggleFavorite(p, isFav) {
+        var targetId = getPresetId(p);
+        if (isFav) {
+            for (var fi = 0; fi < favoritesList.length; fi++) {
+                if (getPresetId(favoritesList[fi]) === targetId) {
+                    favoritesList.splice(fi, 1);
+                    break;
+                }
             }
-        };
+            showToast("Removed from favorites.", "info");
+        } else {
+            favoritesList.push({
+                name: p.name,
+                x1: p.x1,
+                y1: p.y1,
+                x2: p.x2,
+                y2: p.y2
+            });
+            showToast("Added to favorites.", "success");
+        }
+        saveFavorites();
 
-        btnMute.onclick = function() {
-            var isMuted = editor.toggleMute();
-            this.innerText = isMuted ? "×" : "🔊";
-            this.style.color = isMuted ? "#ff4444" : "#eee";
-        };
+        var targetStars = document.querySelectorAll('[data-star-id="' + targetId + '"]');
+        for (var i = 0; i < targetStars.length; i++) {
+            var starEl = targetStars[i];
+            if (isFav) {
+                starEl.classList.remove("active");
+                starEl.title = "Add to Favorites";
+            } else {
+                starEl.classList.add("active");
+                starEl.title = "Remove from Favorites";
+            }
+        }
 
+        var favHeaderCount = document.querySelector('[data-ci="0"] .cat-count');
+        if (favHeaderCount) {
+            favHeaderCount.textContent = favoritesList.length;
+        }
+
+        var favGrid = document.querySelector('[data-grid-cat="⭐ Favorites"]');
+        if (favGrid) {
+            if (isFav) {
+                var cardInFav = favGrid.querySelector('[data-preset-id="' + targetId + '"]');
+                if (cardInFav) {
+                    cardInFav.style.animation = "none";
+                    void cardInFav.offsetWidth;
+                    cardInFav.style.animation = "presetOut 0.25s ease forwards";
+                    setTimeout(function() {
+                        cardInFav.remove();
+                    }, 250);
+                }
+            } else {
+                var item = document.createElement("div");
+                item.className = "preset-item";
+                item.style.animation = "presetIn 0.38s ease-out both";
+                item.draggable = true;
+                item.setAttribute("data-preset-id", targetId);
+
+                var img = document.createElement("img");
+                img.src = makeThumb(p);
+                img.className = "preset-icon";
+                var label = document.createElement("span");
+                label.textContent = p.name;
+                item.appendChild(img);
+                item.appendChild(label);
+
+                var star = document.createElement("span");
+                star.className = "preset-fav-star active";
+                star.innerHTML = "★";
+                star.title = "Remove from Favorites";
+                star.setAttribute("data-star-id", targetId);
+                star.addEventListener("click", function(ev) {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    var currentlyFav = star.classList.contains("active");
+                    toggleFavorite(p, currentlyFav);
+                });
+                item.appendChild(star);
+
+                item.addEventListener("click", function() {
+                    var items = favGrid.querySelectorAll(".preset-item");
+                    var pi = Array.prototype.indexOf.call(items, item);
+                    sel = {ci: 0, pi: pi};
+                    editor.morphTo(p.x1, p.y1, p.x2, p.y2);
+                    scheduleRender();
+                });
+
+                item.addEventListener("dragstart", function(ev) {
+                    var items = favGrid.querySelectorAll(".preset-item");
+                    var pi = Array.prototype.indexOf.call(items, item);
+                    drag = {type: "preset", ci: 0, pi: pi};
+                    ev.dataTransfer.effectAllowed = "move";
+                    setTimeout(function() { item.classList.add("dragging"); }, 0);
+                });
+                item.addEventListener("dragend", function() {
+                    item.classList.remove("dragging");
+                    drag = null;
+                    document.querySelectorAll(".drag-over").forEach(function(el) { el.classList.remove("drag-over"); });
+                });
+
+                favGrid.appendChild(item);
+            }
+        }
+    }
+
+    var renderPending = false;
+    function scheduleRender() {
+        if (renderPending) return;
+        renderPending = true;
+        setTimeout(function() {
+            renderPending = false;
+            render();
+        }, 0);
     }
 
     function render() {
@@ -1673,38 +2244,20 @@ var curvaseApp = (function() {
         var scrollTop = panel.scrollTop;
         panel.innerHTML = "";
 
-        var drag = null;
+        var viewCategories = [
+            { name: "⭐ Favorites", open: favoritesOpen, items: favoritesList, isVirtualFav: true }
+        ].concat(categories.filter(function(c) { return c.name !== "⭐ Favorites"; }));
 
-        function makeThumb(p) {
-            if (p._thumb) return p._thumb;
-            var c = document.createElement("canvas");
-            c.width = 54; c.height = 40;
-            var ctx = c.getContext("2d");
-            var padX = 6, padY = 6;
-            var cw = c.width - padX*2, ch = c.height - padY*2;
-            var sx = padX, sy = c.height - padY, ex = c.width - padX, ey = padY;
-            var cp1x = sx + p.x1*cw, cp1y = sy - p.y1*ch;
-            var cp2x = sx + p.x2*cw, cp2y = sy - p.y2*ch;
-            ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(cp1x,cp1y); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(cp2x,cp2y); ctx.stroke();
-            ctx.fillStyle = "rgba(255,255,255,0.7)";
-            ctx.beginPath(); ctx.arc(cp1x,cp1y,1.5,0,Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(cp2x,cp2y,1.5,0,Math.PI*2); ctx.fill();
-            ctx.strokeStyle = "#ccc"; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.moveTo(sx,sy); ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,ex,ey); ctx.stroke();
-            ctx.fillStyle = "#ccc";
-            ctx.beginPath(); ctx.arc(sx,sy,1.5,0,Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(ex,ey,1.5,0,Math.PI*2); ctx.fill();
-            p._thumb = c.toDataURL();
-            return p._thumb;
-        }
+        var favSet = {};
+        favoritesList.forEach(function(fp) {
+            favSet[getPresetId(fp)] = true;
+        });
 
-        categories.forEach(function(cat, ci) {
+        viewCategories.forEach(function(cat, ci) {
 
             var header = document.createElement("div");
             header.className = "cat-header";
-            header.draggable = true;
+            header.draggable = !cat.isVirtualFav;
             header.dataset.ci = ci;
             header.innerHTML =
                 '<span class="cat-chevron">' + (cat.open ? '▾' : '▸') + '</span>' +
@@ -1713,20 +2266,46 @@ var curvaseApp = (function() {
 
             header.addEventListener("click", function(e) {
                 if (e.target.classList.contains("cat-name")) {
-
                     return;
                 }
-                cat.open = !cat.open;
-                saveData(); render();
+                if (cat.isVirtualFav) {
+                    favoritesOpen = !favoritesOpen;
+                    saveFavorites();
+                } else {
+                    cat.open = !cat.open;
+                    saveData();
+                }
+                scheduleRender();
             });
 
             header.querySelector(".cat-name").addEventListener("dblclick", function(e) {
                 e.stopPropagation();
-                var n = prompt("Rename category:", cat.name);
-                if (n && n.trim()) { cat.name = n.trim(); saveData(); render(); }
+                if (cat.isVirtualFav) return;
+                var nameSpan = this;
+                var oldName = cat.name;
+                var inp = document.createElement("input");
+                inp.type = "text";
+                inp.value = oldName;
+                inp.className = "cat-inline-edit";
+                inp.style.cssText = "background:var(--surface);border:1px solid var(--accent);color:var(--text);font-size:10px;font-weight:600;letter-spacing:0.05em;border-radius:2px;padding:0 4px;width:90px;outline:none;";
+                nameSpan.replaceWith(inp);
+                inp.focus();
+                inp.select();
+                function commit() {
+                    var n = inp.value.trim();
+                    if (n && n !== oldName) { cat.name = n; saveData(); scheduleRender(); return; }
+                    scheduleRender();
+                }
+                inp.addEventListener("blur", commit);
+                inp.addEventListener("keydown", function(ev) {
+                    ev.stopPropagation();
+                    if (ev.key === "Enter") { inp.blur(); }
+                    else if (ev.key === "Escape") { inp.value = oldName; inp.blur(); }
+                });
             });
 
             header.addEventListener("dragstart", function(e) {
+                if (cat.isVirtualFav) { e.preventDefault(); return; }
                 drag = {type: "cat", ci: ci};
                 e.dataTransfer.effectAllowed = "move";
                 setTimeout(function() { header.classList.add("dragging"); }, 0);
@@ -1738,25 +2317,34 @@ var curvaseApp = (function() {
             });
             header.addEventListener("dragover", function(e) {
                 e.preventDefault();
-                if (!drag) return;
+                if (!drag || cat.isVirtualFav) return;
                 header.classList.add("drag-over");
             });
             header.addEventListener("dragleave", function() { header.classList.remove("drag-over"); });
             header.addEventListener("drop", function(e) {
                 e.preventDefault();
                 header.classList.remove("drag-over");
+                if (cat.isVirtualFav) return;
                 if (!drag || drag.ci === ci) return;
                 if (drag.type === "cat") {
-                    var moved = categories.splice(drag.ci, 1)[0];
-                    var targetIdx = ci > drag.ci ? ci - 1 : ci;
+                    var moved = categories.splice(drag.ci - 1, 1)[0];
+                    var targetIdx = (ci > drag.ci ? ci - 1 : ci) - 1;
+                    if (targetIdx < 0) targetIdx = 0;
+                    if (targetIdx > categories.length) targetIdx = categories.length;
                     categories.splice(targetIdx, 0, moved);
                 } else if (drag.type === "preset") {
-
-                    var movedP = categories[drag.ci].items.splice(drag.pi, 1)[0];
-                    cat.items.push(movedP);
+                    var movedP;
+                    if (drag.ci === 0) {
+                        movedP = favoritesList[drag.pi];
+                    } else {
+                        movedP = categories[drag.ci - 1].items.splice(drag.pi, 1)[0];
+                    }
+                    if (movedP) {
+                        cat.items.push(movedP);
+                    }
                 }
                 sel = {ci: -1, pi: -1};
-                saveData(); render();
+                saveData(); scheduleRender();
             });
 
             header.addEventListener("mousedown", function(e) {
@@ -1771,6 +2359,7 @@ var curvaseApp = (function() {
 
             var grid = document.createElement("div");
             grid.className = "cat-grid";
+            grid.setAttribute("data-grid-cat", cat.name);
 
             cat.items.forEach(function(p, pi) {
                 var item = document.createElement("div");
@@ -1778,6 +2367,9 @@ var curvaseApp = (function() {
                 item.className = "preset-item" + (isSel ? " selected" : "");
                 item.style.animationDelay = Math.min(pi * 42, 320) + "ms";
                 item.draggable = true;
+
+                var pid = getPresetId(p);
+                item.setAttribute("data-preset-id", pid);
 
                 var img = document.createElement("img");
                 img.src = makeThumb(p);
@@ -1787,11 +2379,25 @@ var curvaseApp = (function() {
                 item.appendChild(img);
                 item.appendChild(label);
 
+                var isFav = favSet[pid] === true;
+                var star = document.createElement("span");
+                star.className = "preset-fav-star" + (isFav ? " active" : "");
+                star.innerHTML = "★";
+                star.title = isFav ? "Remove from Favorites" : "Add to Favorites";
+                star.setAttribute("data-star-id", pid);
+                star.addEventListener("click", function(ev) {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    var currentlyFav = star.classList.contains("active");
+                    toggleFavorite(p, currentlyFav);
+                });
+                item.appendChild(star);
+
                 item.addEventListener("click", function() {
                     sel = {ci: ci, pi: pi};
 
                     editor.morphTo(p.x1, p.y1, p.x2, p.y2);
-                    render();
+                    scheduleRender();
                     requestAnimationFrame(function() {
                         var selected = document.querySelector(".preset-item.selected");
                         if (selected) animClass(selected, "preset-select-pop", 560);
@@ -1804,7 +2410,7 @@ var curvaseApp = (function() {
                     sel = {ci: ci, pi: pi};
                     editor.setEndHandles(p.x1, p.y1, p.x2, p.y2);
                     syncInputs();
-                    render();
+                    scheduleRender();
                     requestAnimationFrame(function() {
                         var selected = document.querySelector(".preset-item.selected");
                         if (selected) animClass(selected, "preset-select-pop", 560);
@@ -1833,11 +2439,21 @@ var curvaseApp = (function() {
                     item.classList.remove("drag-over");
                     if (!drag || drag.type !== "preset") return;
                     if (drag.ci === ci && drag.pi === pi) return;
-                    var movedP = categories[drag.ci].items.splice(drag.pi, 1)[0];
+                    var movedP;
+                    if (drag.ci === 0) {
+                        movedP = favoritesList.splice(drag.pi, 1)[0];
+                        saveFavorites();
+                    } else {
+                        var srcCat = categories[drag.ci - 1];
+                        if (!srcCat) return;
+                        movedP = srcCat.items.splice(drag.pi, 1)[0];
+                    }
+                    if (!movedP) return;
                     var insertAt = (drag.ci === ci && drag.pi < pi) ? pi - 1 : pi;
+                    if (insertAt < 0) insertAt = 0;
                     cat.items.splice(insertAt, 0, movedP);
                     sel = {ci: ci, pi: insertAt};
-                    saveData(); render();
+                    saveData(); scheduleRender();
                 });
 
                 grid.appendChild(item);
@@ -1875,7 +2491,8 @@ var curvaseApp = (function() {
             var items = grid.querySelectorAll(".preset-item");
             var anyVisible = false;
             items.forEach(function(item) {
-                var name = (item.querySelector("span") || {}).textContent || "";
+                var labelEl = item.querySelector("span:not(.preset-fav-star)");
+                var name = labelEl ? labelEl.textContent : "";
                 var match = name.toLowerCase().indexOf(term) !== -1;
                 item.style.display = match ? "" : "none";
                 if (match) anyVisible = true;
@@ -1927,17 +2544,27 @@ var curvaseApp = (function() {
 
     function syncInputs() {
         var v = editor.getValues();
+        var isFiniteVal = isFinite(v[0]) && isFinite(v[1]) && isFinite(v[2]) && isFinite(v[3]);
 
         if (document.getElementById("x1")) {
-            document.getElementById("x1").value = v[0].toFixed(2);
-            document.getElementById("y1").value = v[1].toFixed(2);
-            document.getElementById("x2").value = v[2].toFixed(2);
-            document.getElementById("y2").value = v[3].toFixed(2);
+            document.getElementById("x1").value = isFiniteVal ? v[0].toFixed(2) : "0.00";
+            document.getElementById("y1").value = isFiniteVal ? v[1].toFixed(2) : "0.00";
+            document.getElementById("x2").value = isFiniteVal ? v[2].toFixed(2) : "1.00";
+            document.getElementById("y2").value = isFiniteVal ? v[3].toFixed(2) : "1.00";
         }
 
         var displayEl = document.getElementById("bezier-display");
         if (displayEl) {
-            displayEl.innerText = v[0].toFixed(2) + ", " + v[1].toFixed(2) + ", " + v[2].toFixed(2) + ", " + v[3].toFixed(2);
+            var pointCount = editor.getPointCount();
+            var displayText;
+            if (pointCount > 2) {
+                displayText = pointCount + " points — " + (pointCount - 1) + " segments";
+            } else if (isFiniteVal) {
+                displayText = v[0].toFixed(2) + ", " + v[1].toFixed(2) + ", " + v[2].toFixed(2) + ", " + v[3].toFixed(2);
+            } else {
+                displayText = "0.00, 0.00, 1.00, 1.00";
+            }
+            displayEl.innerText = displayText;
             displayEl.classList.remove("flash");
             void displayEl.offsetWidth;
             displayEl.classList.add("flash");
@@ -1952,13 +2579,27 @@ var curvaseApp = (function() {
     }
 
     function loadData() {
+        loadFavorites();
         var raw = localStorage.getItem("curvase_presets_v2");
         if (raw) {
             try {
                 var parsed = JSON.parse(raw);
-                if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].items) {
-                    categories = parsed;
-                    return;
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    var migratedFavs = [];
+                    var filtered = parsed.filter(function(cat) {
+                        if (cat.name === "⭐ Favorites") {
+                            migratedFavs = cat.items || [];
+                            return false;
+                        }
+                        return true;
+                    });
+                    if (filtered.length > 0) {
+                        categories = filtered;
+                    }
+                    if (migratedFavs.length > 0 && favoritesList.length === 0) {
+                        favoritesList = migratedFavs;
+                        saveFavorites();
+                    }
                 }
             } catch(e) {}
         }
@@ -1972,6 +2613,7 @@ var curvaseApp = (function() {
                     saveData();
                 }
             } catch(e) {}
+            try { localStorage.removeItem("curvase_presets_final"); } catch(e) {}
         }
     }
 

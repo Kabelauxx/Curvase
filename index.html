@@ -1,282 +1,481 @@
 <!doctype html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
-    <title>Curvase</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Curvase - Premium Bezier Easing Curve Editor and Inspector for After Effects">
+    <title>Curvase - Premium Bezier Easing Curve Editor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 400;
+            src: local('Inter'), local('Inter-Regular');
+        }
+
+        @font-face {
+            font-family: 'Outfit';
+            font-style: normal;
+            font-weight: 700;
+            src: local('Outfit'), local('Outfit-Bold');
+        }
+    </style>
     <link rel="stylesheet" href="./style.css">
 </head>
+
 <body>
-<div id="curvase-app">
-
-    <header id="header">
-        <div id="header-left">
-            <button type="button" id="ext-name" class="brand-btn" title="Switch to Tools — composition helpers and inspector. Click again for Curve.">Curvase</button>
-            <span id="header-mode-badge" class="mode-badge" aria-live="polite">Curve</span>
-            <span id="ext-author" class="ext-author"></span>
-        </div>
-        <div id="header-right">
-            <button type="button" id="btn-speed-mode" class="header-chip" title="Speed graph view — Y is velocity, not value.">Speed</button>
-
-            <div id="audio-controls">
-                <button type="button" id="btn-mute" title="Mute / Unmute" aria-label="Mute or unmute background video">🔊</button>
-                <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" title="Volume" aria-label="Background video volume">
-            </div>
-
-            <button type="button" class="icon-btn" id="btn-spectrum" title="Spectrum — live FFT overlay from background video or audio. Requires a video or audio source." aria-label="Toggle live spectrum overlay" aria-pressed="false">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3"  y="14" width="2" height="7" rx="1"/>
-                    <rect x="7"  y="9"  width="2" height="12" rx="1"/>
-                    <rect x="11" y="5"  width="2" height="16" rx="1"/>
-                    <rect x="15" y="10" width="2" height="11" rx="1"/>
-                    <rect x="19" y="13" width="2" height="8"  rx="1"/>
-                </svg>
-            </button>
-
-            <button type="button" class="icon-btn" id="btn-bg" title="Background — reference image or video behind the curve" aria-label="Set background image or video">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21 15 16 10 5 21"/>
-                </svg>
-            </button>
-            <input type="file" id="bg-file-input" accept="image/*,video/*" style="display:none">
-        </div>
-    </header>
-
-    <div id="view-curve">
-        <div id="canvas-container" aria-label="Easing curve editor">
-            <canvas id="curve-canvas" role="img" aria-label="Bezier easing curve"></canvas>
-        </div>
-        <p id="canvas-hint" class="canvas-hint">Scroll to zoom · Drag handles · Right-click graph · Double-click to reset · Ctrl+click to add point</p>
-
-        <div id="controls">
-            <div id="point-inputs">
-                <div class="side-btns">
-                    <button type="button" class="ctrl-btn" id="btn-undo" title="Undo (Ctrl+Z)" aria-label="Undo curve edit" disabled>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M3 7v6h6"/><path d="M3 13C5 7 10 4 16 6a9 9 0 0 1 5 8"/>
-                        </svg>
-                    </button>
-                    <button type="button" class="ctrl-btn" id="btn-redo" title="Redo (Ctrl+Y)" aria-label="Redo curve edit" disabled>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 7v6h-6"/><path d="M21 13C19 7 14 4 8 6a9 9 0 0 0-5 8"/>
-                        </svg>
-                    </button>
-                    <button type="button" class="ctrl-btn" id="btn-read" title="Read easing from timeline selection (adjacent keys, not HOLD)" aria-label="Read easing from keyframes">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 3L4.31 3C3.59 3 3 3.59 3 4.31L3 19.69C3 20.41 3.59 21 4.31 21L19.69 21C20.41 21 21 20.41 21 19.69L21 12"/>
-                            <path d="M12 7c0 0 .21 2.64 1.29 3.71C14.36 11.79 17 12 17 12s-2.64.21-3.71 1.29C12.21 14.36 12 17 12 17s-.21-2.64-1.29-3.71C9.64 12.21 7 12 7 12s2.64-.21 3.71-1.29C11.79 9.64 12 7 12 7z"/>
-                            <path d="M18.75 2.5s.12 1.45.71 2.04c.59.59 2.04.71 2.04.71s-1.45.12-2.04.71c-.59.59-.71 2.04-.71 2.04s-.12-1.45-.71-2.04C17.45 5.37 16 5.25 16 5.25s1.45-.12 2.04-.71c.59-.59.71-2.04.71-2.04z"/>
-                        </svg>
-                    </button>
-                </div>
-
-                <button type="button" id="bezier-display" class="bezier-display-btn" title="Edit numeric values (x1, y1, x2, y2)">0.42, 0.00, 0.58, 1.00</button>
-
-                <div class="side-btns">
-                    <button type="button" class="ctrl-btn" id="btn-import-preset" title="Import presets from JSON" aria-label="Import presets">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6"/>
-                            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                    </button>
-                    <button type="button" class="ctrl-btn" id="btn-export-preset" title="Export presets to JSON" aria-label="Export presets">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6"/>
-                            <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-
-            <div id="hidden-inputs">
-                <input type="number" id="x1" step="0.01" value="0.42">
-                <input type="number" id="y1" step="0.01" value="0.00">
-                <input type="number" id="x2" step="0.01" value="0.58">
-                <input type="number" id="y2" step="0.01" value="1.00">
-            </div>
-
-            <div id="actions-row" class="apply-toolbar">
-                <button type="button" id="btn-apply" title="Apply curve to selected layers and keyframes in After Effects" aria-label="Apply easing to keyframes"><span class="btn-label">Apply to keyframes</span></button>
-            </div>
-
-            <div id="resizer" role="separator" aria-orientation="horizontal" aria-label="Resize presets panel" title="Drag to resize presets list"></div>
-
-            <div id="presets-header">
-                <span class="presets-title">Presets</span>
-                <input id="preset-search" type="search" placeholder="Search presets…" autocomplete="off" spellcheck="false" aria-label="Search presets">
-                <div class="preset-buttons">
-                    <button type="button" class="ctrl-btn danger" id="btn-delete-selected" title="Delete selected preset or category" aria-label="Delete preset">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                            <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-                        </svg>
-                    </button>
-                    <button type="button" class="ctrl-btn" id="btn-save-preset" title="Save current curve as a preset" aria-label="Save preset">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                            <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-
-            <div id="presets-panel"></div>
-        </div>
+    <div class="glowing-background">
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+        <div class="glow-orb orb-3"></div>
     </div>
+    <div id="curvase-app">
 
-    <div id="view-tools" style="display:none">
-        <div class="tools-layout">
-
-            <div class="tools-group inspector-group">
-                <div class="inspector-header">
-                    <div class="tools-label">Inspector</div>
-                    <span id="inspector-layer-name"></span>
+        <header id="header">
+            <div id="header-left">
+                <button type="button" id="ext-name" class="brand-btn">Curvase</button>
+                <div class="nav-segment-control">
+                    <button type="button" id="nav-tab-curve" class="nav-tab-btn active"
+                        title="Curve Canvas View">Curve</button>
+                    <button type="button" id="nav-tab-tools" class="nav-tab-btn"
+                        title="Utilities & Inspector View">Tools</button>
                 </div>
-                <div id="inspector-rows"></div>
+                <span id="header-mode-badge" class="mode-badge" aria-live="polite" style="display:none">Curve</span>
+                <span id="ext-author" class="ext-author"></span>
             </div>
-            <div class="tools-row">
-                <div class="tools-group">
-                    <div class="tools-label">Anchor</div>
-                    <span class="grid-rc-hint">Klik kanan kotak → Reverse</span>
-                    <div class="grid-3x3">
-                        <button type="button" class="grid-btn" id="anc-tl" title="Anchor top-left">↖</button>
-                        <button type="button" class="grid-btn" id="anc-tc" title="Anchor top-center">↑</button>
-                        <button type="button" class="grid-btn" id="anc-tr" title="Anchor top-right">↗</button>
-                        <button type="button" class="grid-btn" id="anc-ml" title="Anchor middle-left">←</button>
-                        <button type="button" class="grid-btn" id="anc-mc" title="Anchor center">⊕</button>
-                        <button type="button" class="grid-btn" id="anc-mr" title="Anchor middle-right">→</button>
-                        <button type="button" class="grid-btn" id="anc-bl" title="Anchor bottom-left">↙</button>
-                        <button type="button" class="grid-btn" id="anc-bc" title="Anchor bottom-center">↓</button>
-                        <button type="button" class="grid-btn" id="anc-br" title="Anchor bottom-right">↘</button>
-                    </div>
-                </div>
-
-                <div class="tools-group">
-                    <div class="tools-label">Align</div>
-                    <span class="grid-rc-hint">Klik kanan kotak → Reverse</span>
-                    <div class="grid-3x3">
-                        <button type="button" class="grid-btn" id="ali-tl" title="Align top-left">↖</button>
-                        <button type="button" class="grid-btn" id="ali-tc" title="Align top-center">↑</button>
-                        <button type="button" class="grid-btn" id="ali-tr" title="Align top-right">↗</button>
-                        <button type="button" class="grid-btn" id="ali-ml" title="Align middle-left">←</button>
-                        <button type="button" class="grid-btn" id="ali-mc" title="Align center">⊕</button>
-                        <button type="button" class="grid-btn" id="ali-mr" title="Align middle-right">→</button>
-                        <button type="button" class="grid-btn" id="ali-bl" title="Align bottom-left">↙</button>
-                        <button type="button" class="grid-btn" id="ali-bc" title="Align bottom-center">↓</button>
-                        <button type="button" class="grid-btn" id="ali-br" title="Align bottom-right">↘</button>
-                    </div>
-                </div>
+            <div id="header-right">
+                <button type="button" class="icon-btn" id="btn-settings-toggle" title="Toggle Settings & Overlay Drawer"
+                    aria-label="Toggle settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3" />
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                </button>
             </div>
+        </header>
 
-            <div class="tools-group tools-group-comp">
-                <div class="tools-label">Composition</div>
-                <div class="comp-tools">
-                    <div class="comp-create-row">
-                        <select id="tool-comp-ratio">
-                            <option value="16:9">16:9 — 1920×1080</option>
-                            <option value="4:3">4:3 — 1440×1080</option>
-                            <option value="1:1">1:1 — 1080×1080</option>
-                        </select>
-                        <button type="button" class="list-btn comp-btn-primary" id="tool-make-comp">Create Comp</button>
+        <div id="settings-drawer" class="settings-drawer">
+            <div class="drawer-header">
+                <span>Settings</span>
+                <button type="button" class="drawer-close-btn" id="btn-settings-close"
+                    title="Close Drawer">&times;</button>
+            </div>
+            <div class="drawer-content">
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Graph Modifiers</div>
+                    <div class="drawer-row-toggle">
+                        <span>Speed View</span>
+                        <button type="button" id="btn-speed-mode" class="toggle-switch-btn"
+                            title="Toggle Speed Graph">Off</button>
                     </div>
-                    <div class="comp-grid">
-                        <button type="button" class="list-btn" id="tool-solid-fill">Solid Fill</button>
-                        <button type="button" class="list-btn" id="tool-cam-15">Camera</button>
-                        <button type="button" class="list-btn" id="tool-null-parent">Null + Parent</button>
-                        <button type="button" class="list-btn" id="tool-text-center">Text Center</button>
-                        <button type="button" class="list-btn" id="tool-adj-comp">Adjustment (Comp)</button>
-                        <button type="button" class="list-btn" id="tool-adj-layer">Adjustment (Layer)</button>
-                        <button type="button" class="list-btn" id="tool-precomp">Precompose</button>
-                        <button type="button" class="list-btn" id="tool-light">Light</button>
+                    <div class="drawer-row-toggle">
+                        <span>Symmetry</span>
+                        <button type="button" id="btn-symmetry-mode" class="toggle-switch-btn"
+                            title="Toggle Symmetry Mode">Off</button>
+                    </div>
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Morph Interpolation</div>
+                    <select id="select-morph-style" class="drawer-select" title="Morphing animation style">
+                        <option value="spring">Spring Morph</option>
+                        <option value="snap">Snap Morph</option>
+                        <option value="smooth">Smooth Morph</option>
+                        <option value="linear">Linear Morph</option>
+                    </select>
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Reference & Overlays</div>
+                    <div class="drawer-row-toggle">
+                        <span>Spectrum</span>
+                        <button type="button" class="toggle-switch-btn" id="btn-spectrum"
+                            title="Toggle Spectrum Overlay">Off</button>
+                    </div>
+                    <div class="drawer-row-toggle">
+                        <span>Background</span>
+                        <button type="button" class="toggle-switch-btn" id="btn-bg"
+                            title="Set Background Image/Video">Select</button>
+                    </div>
+                    <input type="file" id="bg-file-input" accept="image/*,video/*" style="display:none">
+
+                    <div class="drawer-audio-controls">
+                        <div class="audio-header">
+                            <span>Volume</span>
+                            <button type="button" id="btn-mute" title="Mute / Unmute"
+                                aria-label="Mute or unmute background video">🔊</button>
+                        </div>
+                        <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" title="Volume"
+                            aria-label="Background video volume">
                     </div>
                 </div>
             </div>
         </div>
+
+        <div id="view-curve">
+            <div id="canvas-container" aria-label="Easing curve editor">
+                <canvas id="curve-canvas" role="img" aria-label="Bezier easing curve"></canvas>
+            </div>
+            <p id="canvas-hint" class="canvas-hint">Scroll to zoom · Drag handles · Right-click graph · Double-click to
+                reset · Ctrl+click to add point</p>
+
+            <div id="controls">
+                <div id="point-inputs">
+                    <div class="side-btns">
+                        <button type="button" class="ctrl-btn" id="btn-undo" title="Undo (Ctrl+Z)"
+                            aria-label="Undo curve edit" disabled>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 7v6h6" />
+                                <path d="M3 13C5 7 10 4 16 6a9 9 0 0 1 5 8" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ctrl-btn" id="btn-redo" title="Redo (Ctrl+Y)"
+                            aria-label="Redo curve edit" disabled>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 7v6h-6" />
+                                <path d="M21 13C19 7 14 4 8 6a9 9 0 0 0-5 8" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ctrl-btn" id="btn-read"
+                            title="Read easing from timeline selection (adjacent keys, not HOLD)"
+                            aria-label="Read easing from keyframes">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path
+                                    d="M12 3L4.31 3C3.59 3 3 3.59 3 4.31L3 19.69C3 20.41 3.59 21 4.31 21L19.69 21C20.41 21 21 20.41 21 19.69L21 12" />
+                                <path
+                                    d="M12 7c0 0 .21 2.64 1.29 3.71C14.36 11.79 17 12 17 12s-2.64.21-3.71 1.29C12.21 14.36 12 17 12 17s-.21-2.64-1.29-3.71C9.64 12.21 7 12 7 12s2.64-.21 3.71-1.29C11.79 9.64 12 7 12 7z" />
+                                <path
+                                    d="M18.75 2.5s.12 1.45.71 2.04c.59.59 2.04.71 2.04.71s-1.45.12-2.04.71c-.59.59-.71 2.04-.71 2.04s-.12-1.45-.71-2.04C17.45 5.37 16 5.25 16 5.25s1.45-.12 2.04-.71c.59-.59.71-2.04.71-2.04z" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <button type="button" id="bezier-display" class="bezier-display-btn"
+                        title="Edit numeric values (x1, y1, x2, y2)">0.42, 0.00, 0.58, 1.00</button>
+
+                    <div class="side-btns">
+                        <button type="button" class="ctrl-btn" id="btn-import-preset" title="Import presets from JSON"
+                            aria-label="Import presets">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ctrl-btn" id="btn-export-preset" title="Export presets to JSON"
+                            aria-label="Export presets">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6" />
+                                <polyline points="17 8 12 3 7 8" />
+                                <line x1="12" y1="3" x2="12" y2="15" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="hidden-inputs">
+                    <input type="number" id="x1" step="0.01" value="0.42">
+                    <input type="number" id="y1" step="0.01" value="0.00">
+                    <input type="number" id="x2" step="0.01" value="0.58">
+                    <input type="number" id="y2" step="0.01" value="1.00">
+                </div>
+
+                <div id="actions-row" class="apply-toolbar">
+                    <button type="button" class="ctrl-btn" id="btn-match-vel" title="Match Velocity (Smooth Transition)"
+                        aria-label="Match Velocity">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 12c3 0 3-8 8-8s5 8 8 8" />
+                        </svg>
+                    </button>
+                    <button type="button" class="ctrl-btn" id="btn-bounce-gen" title="Overshoot/Bounce Generator"
+                        aria-label="Overshoot Generator">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 20L10 4l6 16 2-8 2 8" />
+                        </svg>
+                    </button>
+                    <button type="button" class="ctrl-btn" id="btn-loop-gen" title="Damped Spring Loop / Wave Generator"
+                        aria-label="Loop Wave Generator">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z" />
+                            <path d="M12 6a6 6 0 1 0 6 6 6 6 0 0 0-6-6zm0 10a4 4 0 1 1 4-4 4 4 0 0 1-4 4z" />
+                        </svg>
+                    </button>
+                    <button type="button" class="ctrl-btn" id="btn-theme-selector" title="Switch UI Theme Aesthetics"
+                        aria-label="Switch Theme">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <circle cx="12" cy="6" r="1" />
+                            <circle cx="18" cy="12" r="1" />
+                            <circle cx="12" cy="18" r="1" />
+                            <circle cx="6" cy="12" r="1" />
+                            <circle cx="16" cy="8" r="1" />
+                            <circle cx="8" cy="16" r="1" />
+                            <circle cx="16" cy="16" r="1" />
+                            <circle cx="8" cy="8" r="1" />
+                        </svg>
+                    </button>
+                    <button type="button" id="btn-apply"
+                        title="Apply curve to selected layers and keyframes in After Effects"
+                        aria-label="Apply easing to keyframes"><span class="btn-label">Apply to
+                            keyframes</span></button>
+                </div>
+
+                <div id="resizer" role="separator" aria-orientation="horizontal" aria-label="Resize presets panel"
+                    title="Drag to resize presets list"></div>
+
+                <div id="presets-header">
+                    <span class="presets-title">Presets</span>
+                    <input id="preset-search" type="search" placeholder="Search presets…" autocomplete="off"
+                        spellcheck="false" aria-label="Search presets">
+                    <div class="preset-buttons">
+                        <button type="button" class="ctrl-btn danger" id="btn-delete-selected"
+                            title="Delete selected preset or category" aria-label="Delete preset">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                <path d="M10 11v6" />
+                                <path d="M14 11v6" />
+                                <path d="M9 6V4h6v2" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ctrl-btn" id="btn-save-preset"
+                            title="Save current curve as a preset" aria-label="Save preset">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                                <polyline points="17 21 17 13 7 13 7 21" />
+                                <polyline points="7 3 7 8 15 8" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="presets-panel"></div>
+            </div>
+        </div>
+
+        <div id="view-tools" style="display:none">
+            <div class="tools-layout">
+
+                <div class="tools-group inspector-group">
+                    <div class="inspector-header">
+                        <div class="tools-label">Inspector</div>
+                        <span id="inspector-layer-name"></span>
+                    </div>
+                    <div id="inspector-rows"></div>
+                </div>
+                <div class="tools-row">
+                    <div class="tools-group">
+                        <div class="tools-label">Anchor</div>
+                        <span class="grid-rc-hint">Klik kanan kotak → Reverse</span>
+                        <div class="grid-3x3">
+                            <button type="button" class="grid-btn" id="anc-tl" title="Anchor top-left">↖</button>
+                            <button type="button" class="grid-btn" id="anc-tc" title="Anchor top-center">↑</button>
+                            <button type="button" class="grid-btn" id="anc-tr" title="Anchor top-right">↗</button>
+                            <button type="button" class="grid-btn" id="anc-ml" title="Anchor middle-left">←</button>
+                            <button type="button" class="grid-btn" id="anc-mc" title="Anchor center">⊕</button>
+                            <button type="button" class="grid-btn" id="anc-mr" title="Anchor middle-right">→</button>
+                            <button type="button" class="grid-btn" id="anc-bl" title="Anchor bottom-left">↙</button>
+                            <button type="button" class="grid-btn" id="anc-bc" title="Anchor bottom-center">↓</button>
+                            <button type="button" class="grid-btn" id="anc-br" title="Anchor bottom-right">↘</button>
+                        </div>
+                    </div>
+
+                    <div class="tools-group">
+                        <div class="tools-label">Align</div>
+                        <span class="grid-rc-hint">Klik kanan kotak → Reverse</span>
+                        <div class="grid-3x3">
+                            <button type="button" class="grid-btn" id="ali-tl" title="Align top-left">↖</button>
+                            <button type="button" class="grid-btn" id="ali-tc" title="Align top-center">↑</button>
+                            <button type="button" class="grid-btn" id="ali-tr" title="Align top-right">↗</button>
+                            <button type="button" class="grid-btn" id="ali-ml" title="Align middle-left">←</button>
+                            <button type="button" class="grid-btn" id="ali-mc" title="Align center">⊕</button>
+                            <button type="button" class="grid-btn" id="ali-mr" title="Align middle-right">→</button>
+                            <button type="button" class="grid-btn" id="ali-bl" title="Align bottom-left">↙</button>
+                            <button type="button" class="grid-btn" id="ali-bc" title="Align bottom-center">↓</button>
+                            <button type="button" class="grid-btn" id="ali-br" title="Align bottom-right">↘</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tools-group tools-group-comp">
+                    <div class="tools-label">Composition</div>
+                    <div class="comp-tools">
+                        <div class="comp-create-row">
+                            <select id="tool-comp-ratio">
+                                <option value="16:9">16:9 — 1920×1080</option>
+                                <option value="4:3">4:3 — 1440×1080</option>
+                                <option value="1:1">1:1 — 1080×1080</option>
+                            </select>
+                            <button type="button" class="list-btn comp-btn-primary" id="tool-make-comp">Create
+                                Comp</button>
+                        </div>
+                        <div class="comp-grid">
+                            <button type="button" class="list-btn" id="tool-solid-fill">Solid Fill</button>
+                            <button type="button" class="list-btn" id="tool-cam-15">Camera</button>
+                            <button type="button" class="list-btn" id="tool-null-parent">Null + Parent</button>
+                            <button type="button" class="list-btn" id="tool-text-center">Text Center</button>
+                            <button type="button" class="list-btn" id="tool-adj-comp">Adjustment (Comp)</button>
+                            <button type="button" class="list-btn" id="tool-adj-layer">Adjustment (Layer)</button>
+                            <button type="button" class="list-btn" id="tool-precomp">Precompose</button>
+                            <button type="button" class="list-btn" id="tool-light">Light</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
-</div>
-
-<div id="status-toast" class="status-toast" role="status" aria-live="polite" aria-atomic="true"></div>
-
-<div id="edit-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-    <div class="modal-content" role="document">
-        <h3 id="modal-title">Curve values</h3>
-        <p class="modal-hint">Four numbers: x1, y1, x2, y2 (comma-separated)</p>
-        <input type="text" id="m-bezier-val" placeholder="0.42, 0.00, 0.58, 1.00" spellcheck="false" aria-describedby="modal-title">
-        <div class="modal-actions">
-            <button type="button" id="btn-modal-cancel">Cancel</button>
-            <button type="button" id="btn-modal-save">Apply</button>
+    <div id="save-preset-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="save-preset-modal-title">
+        <div class="modal-content" role="document">
+            <h3 id="save-preset-modal-title">Save Preset</h3>
+            <p class="modal-hint">Name your preset and choose a category.</p>
+            <input type="text" id="save-preset-name" placeholder="Preset name…" spellcheck="false" autocomplete="off"
+                style="width:100%;padding:7px 10px;background:#181818;border:1px solid var(--border2);color:var(--text);border-radius:var(--radius-sm);font-size:12px;outline:none;margin-bottom:8px;">
+            <select id="save-preset-cat" class="modal-select" style="margin-bottom:4px;"></select>
+            <input type="text" id="save-preset-newcat" placeholder="New category name…" spellcheck="false"
+                autocomplete="off"
+                style="display:none;width:100%;padding:7px 10px;background:#181818;border:1px solid var(--border2);color:var(--text);border-radius:var(--radius-sm);font-size:12px;outline:none;margin-top:6px;">
+            <div class="modal-actions">
+                <button type="button" id="btn-save-preset-cancel">Cancel</button>
+                <button type="button" id="btn-save-preset-confirm">Save</button>
+            </div>
         </div>
     </div>
-</div>
 
-<div id="theme-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="theme-modal-title">
-    <div class="modal-content theme-modal-content" role="document">
-        <h3 id="theme-modal-title">Theme Curvase</h3>
-        <p class="modal-hint">Click a preset to change all, or adjust the colors individually.</p>
+    <div id="status-toast" class="status-toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
-        <div class="theme-presets" id="theme-presets">
-            <button type="button" class="theme-preset-btn" data-theme-preset="default">Default</button>
-            <button type="button" class="theme-preset-btn" data-theme-preset="ocean">Ocean</button>
-            <button type="button" class="theme-preset-btn" data-theme-preset="violet">Violet</button>
-        </div>
-
-        <div class="theme-grid" id="theme-grid">
-            <label class="theme-row"><span>Background</span><input type="color" data-theme-var="--bg"></label>
-            <label class="theme-row"><span>Surface</span><input type="color" data-theme-var="--surface"></label>
-            <label class="theme-row"><span>Surface 2</span><input type="color" data-theme-var="--surface2"></label>
-            <label class="theme-row"><span>Border</span><input type="color" data-theme-var="--border"></label>
-            <label class="theme-row"><span>Border 2</span><input type="color" data-theme-var="--border2"></label>
-            <label class="theme-row"><span>Text</span><input type="color" data-theme-var="--text"></label>
-            <label class="theme-row"><span>Text Dim</span><input type="color" data-theme-var="--text-dim"></label>
-            <label class="theme-row"><span>Text Mute</span><input type="color" data-theme-var="--text-mute"></label>
-            <label class="theme-row"><span>Accent</span><input type="color" data-theme-var="--accent"></label>
-            <label class="theme-row"><span>Accent 2</span><input type="color" data-theme-var="--accent2"></label>
-            <label class="theme-row"><span>Blue</span><input type="color" data-theme-var="--blue"></label>
-            <label class="theme-row"><span>White</span><input type="color" data-theme-var="--white"></label>
-            <label class="theme-row"><span>Graph Inside</span><input type="color" data-theme-var="--graph-inner-bg" data-theme-alpha="true"></label>
-            <label class="theme-row"><span>Graph Grid</span><input type="color" data-theme-var="--graph-grid" data-theme-alpha="true"></label>
-            <label class="theme-row"><span>Graph Border</span><input type="color" data-theme-var="--graph-box-border" data-theme-alpha="true"></label>
-            <label class="theme-row"><span>Graph Diagonal</span><input type="color" data-theme-var="--graph-diagonal" data-theme-alpha="true"></label>
-            <label class="theme-row"><span>Graph Outer</span><input type="color" data-theme-var="--graph-canvas-bg"></label>
-            <label class="theme-row"><span>Ease Line</span><input type="color" data-theme-var="--curve-main"></label>
-            <label class="theme-row"><span>Ease Dot End</span><input type="color" data-theme-var="--curve-endpoint"></label>
-            <label class="theme-row"><span>Ease Dot Out</span><input type="color" data-theme-var="--curve-handle-out"></label>
-            <label class="theme-row"><span>Ease Dot In</span><input type="color" data-theme-var="--curve-handle-in"></label>
-        </div>
-
-        <div class="modal-actions">
-            <button type="button" id="btn-theme-reset">Reset</button>
-            <button type="button" id="btn-theme-close">Close</button>
+    <div id="edit-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-content" role="document">
+            <h3 id="modal-title">Curve values</h3>
+            <p class="modal-hint">Four numbers: x1, y1, x2, y2 (comma-separated)</p>
+            <input type="text" id="m-bezier-val" placeholder="0.42, 0.00, 0.58, 1.00" spellcheck="false"
+                aria-describedby="modal-title">
+            <div class="modal-actions">
+                <button type="button" id="btn-modal-cancel">Cancel</button>
+                <button type="button" id="btn-modal-save">Apply</button>
+            </div>
         </div>
     </div>
-</div>
 
-<script src="./lib/CSInterface-4.0.0.js"></script>
-<script src="./curvase.js"></script>
-<script src="./ext.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        var bgInput = document.getElementById('bg-file-input');
-        var audioControls = document.getElementById('audio-controls');
-        if (bgInput) {
-            bgInput.addEventListener('change', function(e) {
-                var file = e.target.files[0];
-                if (!file) return;
-                if (file.type.startsWith('video/')) {
-                    audioControls.classList.add('show-audio');
-                    setTimeout(function() {
-                        if (window.editor && window.editor.bgVideoElement) {
-                            window.editor.bgVideoElement.muted = false;
-                            window.editor.bgVideoElement.play();
-                        }
-                    }, 300);
-                } else {
-                    audioControls.classList.remove('show-audio');
-                }
-            });
-        }
-    });
-</script>
+    <div id="bounce-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="bounce-modal-title">
+        <div class="modal-content" role="document">
+            <h3 id="bounce-modal-title">Overshoot</h3>
+            <p class="modal-hint">Generates damped spring keyframes after the last selected keyframe.</p>
+            <div class="bounce-sliders">
+                <label><span>Amplitude</span> <input type="range" id="b-amp" min="1" max="100" value="30"></label>
+                <label><span>Frequency</span> <input type="range" id="b-freq" min="1" max="20" value="3"></label>
+                <label><span>Decay</span> <input type="range" id="b-decay" min="1" max="20" value="5"></label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="btn-bounce-cancel">Cancel</button>
+                <button type="button" id="btn-bounce-apply">Generate</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="loop-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="loop-modal-title">
+        <div class="modal-content" role="document">
+            <h3 id="loop-modal-title">Loop / Wave Generator</h3>
+            <p class="modal-hint">Generates continuous wave keyframes after the last selected keyframe.</p>
+            <div class="bounce-sliders">
+                <label><span>Wave Type</span>
+                    <select id="l-type" class="modal-select">
+                        <option value="Sine">Sine Wave</option>
+                        <option value="Triangle">Triangle Wave</option>
+                        <option value="Square">Square Wave</option>
+                        <option value="Noise">Noise Wobble</option>
+                    </select>
+                </label>
+                <label><span>Amplitude</span> <input type="range" id="l-amp" min="1" max="200" value="50"></label>
+                <label><span>Frequency (Hz)</span> <input type="range" id="l-freq" min="0" max="20" step="0.5"
+                        value="2"></label>
+                <label><span>Duration (sec)</span> <input type="range" id="l-dur" min="1" max="10" value="4"></label>
+                <label><span>Decay (fade out)</span> <input type="range" id="l-decay" min="0" max="10"
+                        value="0"></label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="btn-loop-cancel">Cancel</button>
+                <button type="button" id="btn-loop-apply">Generate</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="theme-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="theme-modal-title">
+        <div class="modal-content theme-modal-content" role="document">
+            <h3 id="theme-modal-title">Theme Curvase</h3>
+            <p class="modal-hint">Click a preset to change all, or adjust the colors individually.</p>
+
+            <div class="theme-presets" id="theme-presets">
+                <button type="button" class="theme-preset-btn" data-theme-preset="default">Default</button>
+                <button type="button" class="theme-preset-btn" data-theme-preset="cyberpunk">Cyberpunk</button>
+                <button type="button" class="theme-preset-btn" data-theme-preset="ae">AE Classic</button>
+                <button type="button" class="theme-preset-btn" data-theme-preset="nordic">Nordic Frost</button>
+                <button type="button" class="theme-preset-btn" data-theme-preset="sunset">Amber Sunset</button>
+            </div>
+
+            <div class="theme-grid" id="theme-grid">
+                <label class="theme-row"><span>Background</span><input type="color" data-theme-var="--bg"></label>
+                <label class="theme-row"><span>Surface</span><input type="color" data-theme-var="--surface"></label>
+                <label class="theme-row"><span>Surface 2</span><input type="color" data-theme-var="--surface2"></label>
+                <label class="theme-row"><span>Border</span><input type="color" data-theme-var="--border"></label>
+                <label class="theme-row"><span>Border 2</span><input type="color" data-theme-var="--border2"></label>
+                <label class="theme-row"><span>Text</span><input type="color" data-theme-var="--text"></label>
+                <label class="theme-row"><span>Text Dim</span><input type="color" data-theme-var="--text-dim"></label>
+                <label class="theme-row"><span>Text Mute</span><input type="color" data-theme-var="--text-mute"></label>
+                <label class="theme-row"><span>Accent</span><input type="color" data-theme-var="--accent"></label>
+                <label class="theme-row"><span>Accent 2</span><input type="color" data-theme-var="--accent2"></label>
+                <label class="theme-row"><span>Blue</span><input type="color" data-theme-var="--blue"></label>
+                <label class="theme-row"><span>White</span><input type="color" data-theme-var="--white"></label>
+                <label class="theme-row"><span>Graph Inside</span><input type="color" data-theme-var="--graph-inner-bg"
+                        data-theme-alpha="true"></label>
+                <label class="theme-row"><span>Graph Grid</span><input type="color" data-theme-var="--graph-grid"
+                        data-theme-alpha="true"></label>
+                <label class="theme-row"><span>Graph Border</span><input type="color"
+                        data-theme-var="--graph-box-border" data-theme-alpha="true"></label>
+                <label class="theme-row"><span>Graph Diagonal</span><input type="color"
+                        data-theme-var="--graph-diagonal" data-theme-alpha="true"></label>
+                <label class="theme-row"><span>Graph Outer</span><input type="color"
+                        data-theme-var="--graph-canvas-bg"></label>
+                <label class="theme-row"><span>Ease Line</span><input type="color"
+                        data-theme-var="--curve-main"></label>
+                <label class="theme-row"><span>Ease Dot End</span><input type="color"
+                        data-theme-var="--curve-endpoint"></label>
+                <label class="theme-row"><span>Ease Dot Out</span><input type="color"
+                        data-theme-var="--curve-handle-out"></label>
+                <label class="theme-row"><span>Ease Dot In</span><input type="color"
+                        data-theme-var="--curve-handle-in"></label>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" id="btn-theme-reset">Reset</button>
+                <button type="button" id="btn-theme-close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="./lib/CSInterface-4.0.0.js"></script>
+    <script src="./curvase.js"></script>
+    <script src="./ext.js"></script>
 </body>
+
 </html>
