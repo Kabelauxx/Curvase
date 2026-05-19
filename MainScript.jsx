@@ -114,9 +114,6 @@ $._curvase = {
         } else {
             var u = basis.u;
             var L = basis.len;
-            // Value-graph Bezier (time vs value) must not drive perpendicular path curvature.
-            // Old: mixed sy/sx into v (normal) → presets like Ease In bent the motion sideways first.
-            // Keep handles collinear with travel; temporal easing comes from KeyframeEase only.
             var outMag = sx1 * L;
             var inMag = (1 - sx2) * L;
             var outTan = [];
@@ -336,19 +333,22 @@ $._curvase = {
                         continue;
                     }
 
-                    prop.setInterpolationTypeAtKey(
-                        idx,
-                        KeyframeInterpolationType.BEZIER,
-                        KeyframeInterpolationType.BEZIER
-                    );
+                    var curInType  = prop.keyInInterpolationType(idx);
+                    var curOutType = prop.keyOutInterpolationType(idx);
+                    var hasPrev = idx > 1;
+                    var hasNext = idx < prop.numKeys;
+
+                    var newInType  = hasPrev ? KeyframeInterpolationType.BEZIER : curInType;
+                    var newOutType = hasNext ? KeyframeInterpolationType.BEZIER : curOutType;
+                    if (curInType  === KeyframeInterpolationType.HOLD) newInType  = curInType;
+                    if (curOutType === KeyframeInterpolationType.HOLD) newOutType = curOutType;
+                    prop.setInterpolationTypeAtKey(idx, newInType, newOutType);
 
                     var curIn = prop.keyInTemporalEase(idx);
                     var curOut = prop.keyOutTemporalEase(idx);
                     var temporalDims = curIn.length;
                     var newIn = [];
                     var newOut = [];
-                    var hasPrev = idx > 1;
-                    var hasNext = idx < prop.numKeys;
 
                     for (var d = 0; d < temporalDims; d++) {
                         var inSpd = curIn[d].speed;
@@ -653,8 +653,6 @@ $._curvase = {
                 }
 
                 var propCount = propList.length;
-                var priorPosKeys = [];
-                var dimensionSplit = false;
 
                 for (var pi = 0; pi < propCount; pi++) {
                     var prop = propList[pi];
@@ -667,35 +665,23 @@ $._curvase = {
                     if (dims === 0) { skippedProps++; continue; }
 
                     if (needsSeparation && prop.matchName === "ADBE Position" && !prop.dimensionsSeparated) {
-                        priorPosKeys = savedKeys[pi] || [];
+                        var priorPosKeys = savedKeys[pi] || [];
                         if (priorPosKeys.length < 2) { skippedProps++; continue; }
                         prop.dimensionsSeparated = true;
-                        dimensionSplit = true;
-                        for (var dsi = 0; dsi < layer.selectedProperties.length; dsi++) {
-                            var mn = layer.selectedProperties[dsi].matchName;
-                            if (mn === "ADBE Position_0" || mn === "ADBE Position_1" || mn === "ADBE Position_2") {
-                                propList.push(layer.selectedProperties[dsi]);
-                                savedKeys.push([]);
-                                propCount++;
-                            }
-                        }
+                        var parentGroup = prop.propertyGroup(1);
+                        var xProp = parentGroup.property("ADBE Position_0");
+                        var yProp = parentGroup.property("ADBE Position_1");
+                        var zProp = parentGroup.property("ADBE Position_2");
+                        if (xProp) { propList.push(xProp); savedKeys.push(priorPosKeys); propCount++; for(var k=0;k<priorPosKeys.length;k++){ try{xProp.setSelectedAtKey(priorPosKeys[k],true);}catch(e){} } }
+                        if (yProp) { propList.push(yProp); savedKeys.push(priorPosKeys); propCount++; for(var k=0;k<priorPosKeys.length;k++){ try{yProp.setSelectedAtKey(priorPosKeys[k],true);}catch(e){} } }
+                        if (zProp) { propList.push(zProp); savedKeys.push(priorPosKeys); propCount++; for(var k=0;k<priorPosKeys.length;k++){ try{zProp.setSelectedAtKey(priorPosKeys[k],true);}catch(e){} } }
                         continue;
                     }
 
-                    var targetKeys;
-
-                    if (dimensionSplit && (prop.matchName === "ADBE Position_0" || prop.matchName === "ADBE Position_1" || prop.matchName === "ADBE Position_2")) {
-                        for (var ri = 0; ri < priorPosKeys.length; ri++) {
-                            prop.setSelectedAtKey(priorPosKeys[ri], true);
-                        }
-                        targetKeys = [];
-                        for (var ri = 0; ri < priorPosKeys.length; ri++) targetKeys.push(priorPosKeys[ri]);
-                    } else {
-                        var selKeys = savedKeys[pi];
-                        if (!selKeys || selKeys.length < 2) { skippedProps++; continue; }
-                        targetKeys = [];
-                        for (var ki = 0; ki < selKeys.length; ki++) targetKeys.push(selKeys[ki]);
-                    }
+                    var selKeys = savedKeys[pi];
+                    if (!selKeys || selKeys.length < 2) { skippedProps++; continue; }
+                    var targetKeys = [];
+                    for (var ki = 0; ki < selKeys.length; ki++) targetKeys.push(selKeys[ki]);
 
                     if (targetKeys.length < 2) { skippedProps++; continue; }
 
@@ -774,13 +760,14 @@ $._curvase = {
 
                         var existingIn = prop.keyInTemporalEase(k0);
                         var existingOut = prop.keyOutTemporalEase(k1);
-                        var interpIn = prop.keyInInterpolationType(k0);
-                        var interpOut = prop.keyOutInterpolationType(k1);
 
                         prop.setTemporalEaseAtKey(k0, existingIn, result.outEase);
                         prop.setTemporalEaseAtKey(k1, result.inEase, existingOut);
-                        prop.setInterpolationTypeAtKey(k0, KeyframeInterpolationType.BEZIER, KeyframeInterpolationType.BEZIER);
-                        prop.setInterpolationTypeAtKey(k1, KeyframeInterpolationType.BEZIER, KeyframeInterpolationType.BEZIER);
+
+                        var k0InType = prop.keyInInterpolationType(k0);
+                        var k1OutType = prop.keyOutInterpolationType(k1);
+                        prop.setInterpolationTypeAtKey(k0, k0InType, KeyframeInterpolationType.BEZIER);
+                        prop.setInterpolationTypeAtKey(k1, KeyframeInterpolationType.BEZIER, k1OutType);
 
                         var isSegLinear = (Math.abs(esx1) < 0.005 && Math.abs(esy1) < 0.005 &&
                             Math.abs(esx2 - 1) < 0.005 && Math.abs(esy2 - 1) < 0.005);
@@ -966,6 +953,15 @@ $._curvase = {
         function v(matchName) {
             try {
                 var p = L.property("ADBE Transform Group").property(matchName);
+                if (matchName === "ADBE Position" && p && p.dimensionsSeparated) {
+                    var xProp = L.property("ADBE Transform Group").property("ADBE Position_0");
+                    var yProp = L.property("ADBE Transform Group").property("ADBE Position_1");
+                    var zProp = L.property("ADBE Transform Group").property("ADBE Position_2");
+                    var x = xProp ? xProp.valueAtTime(t, false) : 0;
+                    var y = yProp ? yProp.valueAtTime(t, false) : 0;
+                    var z = zProp ? zProp.valueAtTime(t, false) : 0;
+                    return [x, y, z];
+                }
                 return p ? p.valueAtTime(t, false) : null;
             } catch(e) { return null; }
         }
@@ -992,6 +988,25 @@ $._curvase = {
         for (var mi = 0; mi < MNS.length; mi++) {
             try {
                 var p2 = L.property("ADBE Transform Group").property(MNS[mi]);
+                if (MNS[mi] === "ADBE Position" && p2 && p2.dimensionsSeparated) {
+                    var hasKeys = false;
+                    var atKeyframe = false;
+                    for (var d = 0; d < 3; d++) {
+                        var sp = L.property("ADBE Transform Group").property("ADBE Position_" + d);
+                        if (sp && sp.numKeys > 0) {
+                            hasKeys = true;
+                            var ni = sp.nearestKeyIndex(t);
+                            var kt = sp.keyTime(ni);
+                            if (Math.abs(kt - t) < (1 / 600)) {
+                                atKeyframe = true;
+                            }
+                        }
+                    }
+                    if (hasKeys) {
+                        animFlags[MNS[mi]] = atKeyframe ? 2 : 1;
+                    }
+                    continue;
+                }
                 if (p2 && p2.numKeys > 0) {
                     var ni = p2.nearestKeyIndex(t);
                     var kt = p2.keyTime(ni);
@@ -1024,6 +1039,14 @@ $._curvase = {
                 var L = sel[i];
                 var p = L.property("ADBE Transform Group").property(matchName);
                 if (!p) continue;
+                if (matchName === "ADBE Position" && p.dimensionsSeparated) {
+                    var sepPropName = "ADBE Position_" + dimIndex;
+                    var sepProp = L.property("ADBE Transform Group").property(sepPropName);
+                    if (sepProp) {
+                        sepProp.setValue(value);
+                    }
+                    continue;
+                }
                 var cur = p.value;
                 if (dimIndex === -1) {
                     p.setValue(value);
@@ -1038,6 +1061,183 @@ $._curvase = {
             }
         } catch(e) {}
         app.endUndoGroup();
+    },
+
+    matchVelocity: function() {
+        var comp = app.project.activeItem;
+        if (!comp || !(comp instanceof CompItem)) return "Error: No active composition found.";
+        
+        var selectedProps = comp.selectedProperties;
+        if (!selectedProps || selectedProps.length === 0) return "Error: No properties selected.";
+        
+        app.beginUndoGroup("Curvase: Match Velocity");
+        var matchedCount = 0;
+        
+        for (var pi = 0; pi < selectedProps.length; pi++) {
+            var prop = selectedProps[pi];
+            if (prop.propertyType !== PropertyType.PROPERTY) continue;
+            if (!prop.canVaryOverTime) continue;
+            
+            var selKeys = prop.selectedKeys;
+            if (!selKeys || selKeys.length < 3) continue;
+            
+            for (var ki = 1; ki < selKeys.length - 1; ki++) {
+                var kIndex = selKeys[ki];
+                try {
+                    prop.setTemporalContinuousAtKey(kIndex, true);
+                    prop.setTemporalAutoBezierAtKey(kIndex, false);
+                    matchedCount++;
+                } catch(e) {}
+            }
+        }
+        
+        app.endUndoGroup();
+        return matchedCount > 0 ? "Matched velocity for " + matchedCount + " keyframe(s)." : "No middle keyframes found to match velocity.";
+    },
+
+    generateOvershoot: function(amp, freq, decay) {
+        var comp = app.project.activeItem;
+        if (!comp || !(comp instanceof CompItem)) return "Error: No active composition found.";
+        
+        var selectedProps = comp.selectedProperties;
+        if (!selectedProps || selectedProps.length === 0) return "Error: No properties selected.";
+        
+        app.beginUndoGroup("Curvase: Generate Overshoot");
+        var generatedCount = 0;
+        
+        for (var pi = 0; pi < selectedProps.length; pi++) {
+            var prop = selectedProps[pi];
+            if (prop.propertyType !== PropertyType.PROPERTY) continue;
+            if (!prop.canVaryOverTime) continue;
+            
+            var selKeys = prop.selectedKeys;
+            if (!selKeys || selKeys.length < 2) continue;
+            
+            var k0 = selKeys[selKeys.length - 2];
+            var k1 = selKeys[selKeys.length - 1];
+            
+            var t0 = prop.keyTime(k0);
+            var t1 = prop.keyTime(k1);
+            var dt = t1 - t0;
+            if (dt <= 0) continue;
+            
+            var v0 = prop.keyValue(k0);
+            var v1 = prop.keyValue(k1);
+            
+            var isArr = (v0 instanceof Array);
+            var isShape = prop.propertyValueType === PropertyValueType.SHAPE;
+            if (isShape) continue;
+            
+            var frameRate = comp.frameRate;
+            var duration = 2.0;
+            var steps = Math.floor(duration * frameRate);
+            
+            for (var f = 1; f <= steps; f++) {
+                var tOffset = f / frameRate;
+                var curTime = t1 + tOffset;
+                var factor = (amp / 100) * Math.exp(-decay * tOffset) * Math.sin(freq * Math.PI * 2 * tOffset);
+                
+                if (isArr) {
+                    var newVal = [];
+                    for (var d = 0; d < v1.length; d++) {
+                        var delta = v1[d] - v0[d];
+                        newVal.push(v1[d] + delta * factor);
+                    }
+                    prop.setValueAtTime(curTime, newVal);
+                } else {
+                    var delta = v1 - v0;
+                    prop.setValueAtTime(curTime, v1 + delta * factor);
+                }
+                if (prop.propertyValueType === PropertyValueType.TwoD_SPATIAL || prop.propertyValueType === PropertyValueType.ThreeD_SPATIAL) {
+                    var newIdx = prop.nearestKeyIndex(curTime);
+                    if (Math.abs(prop.keyTime(newIdx) - curTime) < 0.001) {
+                        prop.setSpatialTangentsAtKey(newIdx, [0, 0, 0], [0, 0, 0]);
+                    }
+                }
+                generatedCount++;
+            }
+        }
+        
+        app.endUndoGroup();
+        return generatedCount > 0 ? "Overshoot keyframes generated successfully." : "Error: Ensure at least two selected keyframes on numerical properties.";
+    },
+
+    generateLoop: function(type, amp, freq, duration, decay) {
+        var comp = app.project.activeItem;
+        if (!comp || !(comp instanceof CompItem)) return "Error: No active composition found.";
+        
+        var selectedProps = comp.selectedProperties;
+        if (!selectedProps || selectedProps.length === 0) return "Error: No properties selected.";
+        
+        app.beginUndoGroup("Curvase: Generate Loop");
+        var generatedCount = 0;
+        
+        for (var pi = 0; pi < selectedProps.length; pi++) {
+            var prop = selectedProps[pi];
+            if (prop.propertyType !== PropertyType.PROPERTY) continue;
+            if (!prop.canVaryOverTime) continue;
+            
+            var selKeys = prop.selectedKeys;
+            if (!selKeys || selKeys.length < 2) continue;
+            
+            var k0 = selKeys[selKeys.length - 2];
+            var k1 = selKeys[selKeys.length - 1];
+            
+            var t0 = prop.keyTime(k0);
+            var t1 = prop.keyTime(k1);
+            var dt = t1 - t0;
+            if (dt <= 0) continue;
+            
+            var v0 = prop.keyValue(k0);
+            var v1 = prop.keyValue(k1);
+            
+            var isArr = (v0 instanceof Array);
+            var isShape = prop.propertyValueType === PropertyValueType.SHAPE;
+            if (isShape) continue;
+            
+            var frameRate = comp.frameRate;
+            var steps = Math.floor(duration * frameRate);
+            
+            for (var f = 1; f <= steps; f++) {
+                var tOffset = f / frameRate;
+                var curTime = t1 + tOffset;
+                
+                var rawVal = 0;
+                if (type === "Sine") {
+                    rawVal = Math.sin(freq * Math.PI * 2 * tOffset);
+                } else if (type === "Triangle") {
+                    rawVal = Math.abs(((tOffset * freq) % 1.0) - 0.5) * 4.0 - 1.0;
+                } else if (type === "Square") {
+                    rawVal = Math.sin(freq * Math.PI * 2 * tOffset) >= 0 ? 1.0 : -1.0;
+                } else if (type === "Noise") {
+                    rawVal = Math.sin(freq * Math.PI * 2 * tOffset) + Math.cos(freq * 1.5 * Math.PI * 2 * tOffset) * 0.5;
+                }
+                
+                var factor = (amp / 100) * Math.exp(-decay * tOffset) * rawVal;
+                
+                if (isArr) {
+                    var newVal = [];
+                    for (var d = 0; d < v1.length; d++) {
+                        var delta = v1[d] - v0[d];
+                        newVal.push(v1[d] + delta * factor);
+                    }
+                    prop.setValueAtTime(curTime, newVal);
+                } else {
+                    var delta = v1 - v0;
+                    prop.setValueAtTime(curTime, v1 + delta * factor);
+                }
+                if (prop.propertyValueType === PropertyValueType.TwoD_SPATIAL || prop.propertyValueType === PropertyValueType.ThreeD_SPATIAL) {
+                    var newIdx = prop.nearestKeyIndex(curTime);
+                    if (Math.abs(prop.keyTime(newIdx) - curTime) < 0.001) {
+                        prop.setSpatialTangentsAtKey(newIdx, [0, 0, 0], [0, 0, 0]);
+                    }
+                }
+                generatedCount++;
+            }
+        }
+        
+        app.endUndoGroup();
+        return generatedCount > 0 ? "Loop wave generated successfully." : "Error: Ensure at least two selected keyframes on numerical properties.";
     }
 };
 

@@ -87,15 +87,38 @@ var Curvase = (function() {
         this.spectrumData    = null;
         this.spectrumVisible = true;
         this.spectrumMode    = "bars";
+        this.isSymmetryMode  = false;
+        this.morphStyle      = "spring";
+        this._morphStartPoints = null;
 
         this._beatEnergy = 0;
         this._beatDecay  = 0.88;
         this._segBeatEnergy = new Float32Array(8);
         this._segBeatDecay  = 0.88;
+        this._entranceProgress = 0;
+        this._speedMin = 0;
+        this._speedRange = MAX_SPEED;
         this._initCanvas();
         this._bindEvents();
-        this._draw();
+        this._triggerEntranceAnimation();
     }
+
+    BezierEditor.prototype._triggerEntranceAnimation = function() {
+        var self = this;
+        var start = null;
+        function animate(timestamp) {
+            if (!start) start = timestamp;
+            var elapsed = timestamp - start;
+            var progress = elapsed / 750;
+            if (progress > 1) progress = 1;
+            self._entranceProgress = progress;
+            self._scheduleRender();
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            }
+        }
+        requestAnimationFrame(animate);
+    };
 
     BezierEditor.prototype.toggleMode = function() {
         this.isSpeedMode = !this.isSpeedMode;
@@ -127,6 +150,7 @@ var Curvase = (function() {
         var controls = document.getElementById("controls");
         var usedH = (header ? header.offsetHeight : 0) + (controls ? controls.offsetHeight : 0) + 20;
         var maxH = Math.floor(window.innerHeight - usedH);
+        if (maxH < 100) maxH = 100;
         var size = Math.min(w, maxH);
         if (size < 200) size = 200;
         this.canvas.width = size * this.dpr;
@@ -164,19 +188,19 @@ var Curvase = (function() {
     };
 
     BezierEditor.prototype._toX = function(v) {
-        return PADDING + (v - this.viewXMin) / (this.viewXMax - this.viewXMin) * this.graphSize;
+        return PADDING + (v - this.viewXMin) / Math.max(0.0001, this.viewXMax - this.viewXMin) * this.graphSize;
     };
 
     BezierEditor.prototype._toY = function(v) {
-        return PADDING + (this.viewYMax - v) / (this.viewYMax - this.viewYMin) * this.graphSize;
+        return PADDING + (this.viewYMax - v) / Math.max(0.0001, this.viewYMax - this.viewYMin) * this.graphSize;
     };
 
     BezierEditor.prototype._fromX = function(px) {
-        return this.viewXMin + (px - PADDING) / this.graphSize * (this.viewXMax - this.viewXMin);
+        return this.viewXMin + (px - PADDING) / Math.max(1, this.graphSize) * (this.viewXMax - this.viewXMin);
     };
 
     BezierEditor.prototype._fromY = function(py) {
-        return this.viewYMax - (py - PADDING) / this.graphSize * (this.viewYMax - this.viewYMin);
+        return this.viewYMax - (py - PADDING) / Math.max(1, this.graphSize) * (this.viewYMax - this.viewYMin);
     };
 
     BezierEditor.prototype._dist = function(ax, ay, bx, by) {
@@ -192,8 +216,15 @@ var Curvase = (function() {
         for (var i = 0; i < this.points.length; i++) {
             var p = this.points[i];
             if (p.hOutX !== null) {
-                var visOutX = this.isSpeedMode ? p.hOutX * 0.5 : p.hOutX;
-                var visOutY = this.isSpeedMode ? (p.hOutY / Math.max(0.001, p.hOutX)) / MAX_SPEED : p.hOutY;
+                var visOutX, visOutY;
+                if (this.isSpeedMode) {
+                    visOutX = p.hOutX * 0.5;
+                    var rawSpeedOut = (p.hOutY / Math.max(0.001, p.hOutX));
+                    visOutY = (rawSpeedOut - this._speedMin) / this._speedRange;
+                } else {
+                    visOutX = p.hOutX;
+                    visOutY = p.hOutY;
+                }
                 var d = this._dist(mx, my, this._toX(visOutX), this._toY(visOutY));
                 if (d < bestDist) {
                     bestDist = d;
@@ -201,8 +232,15 @@ var Curvase = (function() {
                 }
             }
             if (p.hInX !== null) {
-                var visInX = this.isSpeedMode ? 1 - ((1 - p.hInX) * 0.5) : p.hInX;
-                var visInY = this.isSpeedMode ? ((1 - p.hInY) / Math.max(0.001, 1 - p.hInX)) / MAX_SPEED : p.hInY;
+                var visInX, visInY;
+                if (this.isSpeedMode) {
+                    visInX = 1 - ((1 - p.hInX) * 0.5);
+                    var rawSpeedIn = ((1 - p.hInY) / Math.max(0.001, 1 - p.hInX));
+                    visInY = (rawSpeedIn - this._speedMin) / this._speedRange;
+                } else {
+                    visInX = p.hInX;
+                    visInY = p.hInY;
+                }
                 var d2 = this._dist(mx, my, this._toX(visInX), this._toY(visInY));
                 if (d2 < bestDist) {
                     bestDist = d2;
@@ -232,6 +270,7 @@ var Curvase = (function() {
         for (var si = 0; si < this.points.length - 1; si++) {
             var a = this.points[si];
             var b = this.points[si + 1];
+            if (a.hOutX === null || b.hInX === null) continue;
             var p0x = a.x, p0y = a.y;
             var p1x = a.hOutX, p1y = a.hOutY;
             var p2x = b.hInX, p2y = b.hInY;
@@ -257,8 +296,8 @@ var Curvase = (function() {
         var b = this.points[segIndex + 1];
 
         var p0x = a.x, p0y = a.y;
-        var p1x = a.hOutX, p1y = a.hOutY;
-        var p2x = b.hInX, p2y = b.hInY;
+        var p1x = (a.hOutX !== null) ? a.hOutX : a.x, p1y = (a.hOutY !== null) ? a.hOutY : a.y;
+        var p2x = (b.hInX  !== null) ? b.hInX  : b.x, p2y = (b.hInY  !== null) ? b.hInY  : b.y;
         var p3x = b.x, p3y = b.y;
 
         var q0x = lerp(p0x, p1x, t), q0y = lerp(p0y, p1y, t);
@@ -384,7 +423,7 @@ var Curvase = (function() {
             }
             var x = this._fromX(mx);
             var y = this._fromY(my);
-            y = Math.round(Math.max(-2, Math.min(3, y)) * 100) / 100;
+            y = Math.round(Math.max(-2, Math.min(3, y)) * 1000) / 1000;
 
             var d = this.dragging;
             var p = this.points[d.index];
@@ -392,7 +431,7 @@ var Curvase = (function() {
             if (d.type === "anchor" && !this.isSpeedMode) {
                 var prevX = this.points[d.index - 1].x;
                 var nextX = this.points[d.index + 1].x;
-                x = Math.round(Math.max(prevX + 0.01, Math.min(nextX - 0.01, x)) * 100) / 100;
+                x = Math.round(Math.max(prevX + 0.001, Math.min(nextX - 0.001, x)) * 1000) / 1000;
                 var dx = x - p.x;
                 var dy = y - p.y;
                 p.x = x;
@@ -400,43 +439,55 @@ var Curvase = (function() {
                 if (p.hInX !== null) { p.hInX += dx; p.hInY += dy; }
                 if (p.hOutX !== null) { p.hOutX += dx; p.hOutY += dy; }
             } else if (d.type === "hOut") {
-                x = Math.round(Math.max(0, Math.min(1, x)) * 100) / 100;
+                x = Math.round(Math.max(0, Math.min(1, x)) * 1000) / 1000;
                 if (e.shiftKey) { y = 0; }
 
                 if (this.isSpeedMode) {
-                    y = Math.max(0, y);
-                    p.hOutX = Math.round(Math.min(1, x * 2) * 100) / 100;
-                    var speed = y * MAX_SPEED;
-                    p.hOutY = Math.round((speed * Math.max(0.001, p.hOutX)) * 100) / 100;
+                    y = Math.max(0, Math.min(MAX_SPEED, y));
+                    p.hOutX = Math.round(Math.min(1, x * 2) * 1000) / 1000;
+                    var rawSpeed = (y * this._speedRange + this._speedMin);
+                    p.hOutY = Math.round((rawSpeed * Math.max(0.001, p.hOutX)) * 1000) / 1000;
                 } else {
                     p.hOutX = x;
                     p.hOutY = y;
                 }
 
+                if (this.isSymmetryMode && !this.isSpeedMode && d.index === 0 && this.points.length >= 2) {
+                    var pLast = this.points[this.points.length - 1];
+                    pLast.hInX = Math.round((1 - p.hOutX) * 1000) / 1000;
+                    pLast.hInY = Math.round((1 - p.hOutY) * 1000) / 1000;
+                }
+
                 if (!e.altKey && !this.isSpeedMode && p.hInX !== null && d.index > 0 && d.index < this.points.length - 1) {
-                    p.hInX = Math.round(Math.max(0, Math.min(1, 2 * p.x - p.hOutX)) * 100) / 100;
-                    p.hInY = Math.round(Math.max(-2, Math.min(3, 2 * p.y - p.hOutY)) * 100) / 100;
+                    p.hInX = Math.round(Math.max(0, Math.min(1, 2 * p.x - p.hOutX)) * 1000) / 1000;
+                    p.hInY = Math.round(Math.max(-2, Math.min(3, 2 * p.y - p.hOutY)) * 1000) / 1000;
                 }
             } else if (d.type === "hIn") {
-                x = Math.round(Math.max(0, Math.min(1, x)) * 100) / 100;
+                x = Math.round(Math.max(0, Math.min(1, x)) * 1000) / 1000;
                 if (e.shiftKey) {
                     if (this.isSpeedMode) { y = 0; }
                     else { y = 1; }
                 }
 
                 if (this.isSpeedMode) {
-                    y = Math.max(0, y);
-                    p.hInX = Math.round((1 - Math.min(1, (1 - x) * 2)) * 100) / 100;
-                    var speed = y * MAX_SPEED;
-                    p.hInY = Math.round((1 - (speed * Math.max(0.001, 1 - p.hInX))) * 100) / 100;
+                    y = Math.max(0, Math.min(MAX_SPEED, y));
+                    p.hInX = Math.round((1 - Math.min(1, (1 - x) * 2)) * 1000) / 1000;
+                    var rawSpeedIn = y * this._speedRange + this._speedMin;
+                    p.hInY = Math.round((1 - (rawSpeedIn * Math.max(0.001, 1 - p.hInX))) * 1000) / 1000;
                 } else {
                     p.hInX = x;
                     p.hInY = y;
                 }
 
+                if (this.isSymmetryMode && !this.isSpeedMode && d.index === this.points.length - 1 && this.points.length >= 2) {
+                    var pFirst = this.points[0];
+                    pFirst.hOutX = Math.round((1 - p.hInX) * 1000) / 1000;
+                    pFirst.hOutY = Math.round((1 - p.hInY) * 1000) / 1000;
+                }
+
                 if (!e.altKey && !this.isSpeedMode && p.hOutX !== null && d.index > 0 && d.index < this.points.length - 1) {
-                    p.hOutX = Math.round(Math.max(0, Math.min(1, 2 * p.x - p.hInX)) * 100) / 100;
-                    p.hOutY = Math.round(Math.max(-2, Math.min(3, 2 * p.y - p.hInY)) * 100) / 100;
+                    p.hOutX = Math.round(Math.max(0, Math.min(1, 2 * p.x - p.hInX)) * 1000) / 1000;
+                    p.hOutY = Math.round(Math.max(-2, Math.min(3, 2 * p.y - p.hInY)) * 1000) / 1000;
                 }
             }
 
@@ -470,9 +521,12 @@ var Curvase = (function() {
             return;
         }
         if (this.dragging) {
+            var wasDragging = this.dragging;
             this.dragging = null;
             this.canvas.style.cursor = this.hovering ? "grab" : "crosshair";
-            this._commit();
+            if (wasDragging.type !== "group" || this._savedPositions.length > 0) {
+                this._commit();
+            }
         }
     };
 
@@ -562,6 +616,16 @@ var Curvase = (function() {
         var boxW = boxRight - boxLeft;
         var boxH = boxBottom - boxTop;
 
+        var beatE = 0;
+        if (this.spectrumData && this.spectrumVisible) {
+            this._beatEnergy = this._beatEnergy * this._beatDecay;
+            if (this._beatEnergy < 0.001) this._beatEnergy = 0;
+            beatE = this._beatEnergy;
+        } else {
+            this._beatEnergy = 0;
+        }
+        document.documentElement.style.setProperty('--beat-energy', beatE.toFixed(3));
+
         if (this.bgImage) {
             var container = document.getElementById('curvase-media-bg');
             if (container) {
@@ -588,6 +652,18 @@ var Curvase = (function() {
         ctx.fillStyle = hasBg ? "rgba(0,0,0,0.18)" : hexToRgba(graphInnerHex, 0.18);
         ctx.fillRect(boxLeft, boxTop, boxW, boxH);
 
+        if (this.spectrumData && this.spectrumVisible && beatE > 0.01) {
+            var cx = boxLeft + boxW / 2;
+            var cy = boxTop + boxH / 2;
+            var rad = Math.min(boxW, boxH) * (0.15 + beatE * 0.45);
+            var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+            grad.addColorStop(0, "rgba(0, 229, 255, " + (beatE * 0.18).toFixed(3) + ")");
+            grad.addColorStop(0.5, "rgba(255, 0, 127, " + (beatE * 0.08).toFixed(3) + ")");
+            grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+            ctx.fillStyle = grad;
+            ctx.fillRect(boxLeft, boxTop, boxW, boxH);
+        }
+
         ctx.strokeStyle = hasBg ? "rgba(255,255,255,0.18)" : hexToRgba(graphGridHex, 0.06);
         ctx.lineWidth = 1;
         for (var i = 1; i < 4; i++) {
@@ -605,11 +681,23 @@ var Curvase = (function() {
 
         this._drawSpectrum(ctx, boxLeft, boxTop, boxW, boxH);
 
-        this._beatEnergy = this._beatEnergy * this._beatDecay;
-        if (this._beatEnergy < 0.001) this._beatEnergy = 0;
-        var beatE = this._beatEnergy;
-
         if (!this.isSpeedMode) {
+
+            if (this._morphStartPoints) {
+                ctx.save();
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(this._toX(this._morphStartPoints[0].x), this._toY(this._morphStartPoints[0].y));
+                for (var si = 0; si < this._morphStartPoints.length - 1; si++) {
+                    var a = this._morphStartPoints[si]; var b = this._morphStartPoints[si + 1];
+                    if (a.hOutX === null || b.hInX === null) continue;
+                    ctx.bezierCurveTo(this._toX(a.hOutX), this._toY(a.hOutY), this._toX(b.hInX), this._toY(b.hInY), this._toX(b.x), this._toY(b.y));
+                }
+                ctx.stroke();
+                ctx.restore();
+            }
 
             ctx.beginPath();
             ctx.strokeStyle = hasBg ? "rgba(255,255,255,0.15)" : hexToRgba(graphDiagHex, 0.05);
@@ -620,22 +708,38 @@ var Curvase = (function() {
 
             ctx.strokeStyle = hasBg ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.25)";
             ctx.lineWidth = hasBg ? 1.5 : 1;
+
+            var pulseScale = 1;
+            if (!(this.dragging || this.hovering) && beatE > 0.01) {
+                pulseScale = 1 + beatE * 0.22;
+            }
+
             for (var pi = 0; pi < this.points.length; pi++) {
                 var pt = this.points[pi];
                 if (pt.hOutX !== null) {
-                    ctx.beginPath(); ctx.moveTo(this._toX(pt.x), this._toY(pt.y)); ctx.lineTo(this._toX(pt.hOutX), this._toY(pt.hOutY)); ctx.stroke();
+                    var hdx = pt.hOutX - pt.x;
+                    var hdy = pt.hOutY - pt.y;
+                    ctx.beginPath();
+                    ctx.moveTo(this._toX(pt.x), this._toY(pt.y));
+                    ctx.lineTo(this._toX(pt.x + hdx * pulseScale), this._toY(pt.y + hdy * pulseScale));
+                    ctx.stroke();
                 }
                 if (pt.hInX !== null) {
-                    ctx.beginPath(); ctx.moveTo(this._toX(pt.x), this._toY(pt.y)); ctx.lineTo(this._toX(pt.hInX), this._toY(pt.hInY)); ctx.stroke();
+                    var hdx = pt.hInX - pt.x;
+                    var hdy = pt.hInY - pt.y;
+                    ctx.beginPath();
+                    ctx.moveTo(this._toX(pt.x), this._toY(pt.y));
+                    ctx.lineTo(this._toX(pt.x + hdx * pulseScale), this._toY(pt.y + hdy * pulseScale));
+                    ctx.stroke();
                 }
             }
             ctx.setLineDash([]);
 
-            var glowBlur   = 10 + beatE * 42;
+            var glowBlur   = 15 + beatE * 50;
 
-            var glowAlpha  = 0.18 + beatE * 0.55;
+            var glowAlpha  = 0.3 + beatE * 0.6;
 
-            var glowWidth  = 8 + beatE * 12;
+            var glowWidth  = 10 + beatE * 15;
 
             if (beatE > 0.15) {
                 ctx.save();
@@ -644,9 +748,14 @@ var Curvase = (function() {
                 ctx.lineWidth = glowWidth + 10;
                 ctx.shadowColor = "#ffffff";
                 ctx.shadowBlur = glowBlur * 1.8;
+                var totalLength = gs * 1.5;
+                if (this._entranceProgress < 1) {
+                    ctx.setLineDash([totalLength * this._entranceProgress, totalLength]);
+                }
                 ctx.moveTo(this._toX(this.points[0].x), this._toY(this.points[0].y));
                 for (var si = 0; si < this.points.length - 1; si++) {
                     var a = this.points[si]; var b = this.points[si + 1];
+                    if (a.hOutX === null || b.hInX === null) continue;
                     ctx.bezierCurveTo(this._toX(a.hOutX), this._toY(a.hOutY), this._toX(b.hInX), this._toY(b.hInY), this._toX(b.x), this._toY(b.y));
                 }
                 ctx.stroke();
@@ -659,9 +768,14 @@ var Curvase = (function() {
             ctx.lineWidth = glowWidth;
             ctx.shadowColor = curveMain;
             ctx.shadowBlur = glowBlur;
+            var totalLength2 = gs * 1.5;
+            if (this._entranceProgress < 1) {
+                ctx.setLineDash([totalLength2 * this._entranceProgress, totalLength2]);
+            }
             ctx.moveTo(this._toX(this.points[0].x), this._toY(this.points[0].y));
             for (var si = 0; si < this.points.length - 1; si++) {
                 var a = this.points[si]; var b = this.points[si + 1];
+                if (a.hOutX === null || b.hInX === null) continue;
                 ctx.bezierCurveTo(this._toX(a.hOutX), this._toY(a.hOutY), this._toX(b.hInX), this._toY(b.hInY), this._toX(b.x), this._toY(b.y));
             }
             ctx.stroke();
@@ -670,12 +784,18 @@ var Curvase = (function() {
             ctx.beginPath();
             ctx.strokeStyle = curveMain;
             ctx.lineWidth = 2;
+            var totalLength3 = gs * 1.5;
+            if (this._entranceProgress < 1) {
+                ctx.setLineDash([totalLength3 * this._entranceProgress, totalLength3]);
+            }
             ctx.moveTo(this._toX(this.points[0].x), this._toY(this.points[0].y));
             for (var si = 0; si < this.points.length - 1; si++) {
                 var a = this.points[si]; var b = this.points[si + 1];
+                if (a.hOutX === null || b.hInX === null) continue;
                 ctx.bezierCurveTo(this._toX(a.hOutX), this._toY(a.hOutY), this._toX(b.hInX), this._toY(b.hInY), this._toX(b.x), this._toY(b.y));
             }
             ctx.stroke();
+            ctx.setLineDash([]);
 
             ctx.beginPath(); ctx.fillStyle = curveEndpoint; ctx.arc(this._toX(this.points[0].x), this._toY(this.points[0].y), 4, 0, Math.PI * 2); ctx.fill();
             ctx.beginPath(); ctx.fillStyle = curveEndpoint; var lastPt = this.points[this.points.length - 1]; ctx.arc(this._toX(lastPt.x), this._toY(lastPt.y), 4, 0, Math.PI * 2); ctx.fill();
@@ -688,8 +808,16 @@ var Curvase = (function() {
                 var hp = this.points[hi];
                 var activeOut = (this.dragging || this.hovering) && ((this.dragging || this.hovering).type === "hOut") && ((this.dragging || this.hovering).index === hi);
                 var activeIn  = (this.dragging || this.hovering) && ((this.dragging || this.hovering).type === "hIn")  && ((this.dragging || this.hovering).index === hi);
-                if (hp.hOutX !== null) this._drawHandle(ctx, hp.hOutX, hp.hOutY, curveHandleOut, activeOut);
-                if (hp.hInX !== null)  this._drawHandle(ctx, hp.hInX,  hp.hInY,  curveHandleIn, activeIn);
+                if (hp.hOutX !== null) {
+                    var hpdx = hp.hOutX - hp.x;
+                    var hpdy = hp.hOutY - hp.y;
+                    this._drawHandle(ctx, hp.x + hpdx * pulseScale, hp.y + hpdy * pulseScale, curveHandleOut, activeOut);
+                }
+                if (hp.hInX !== null) {
+                    var hpdx = hp.hInX - hp.x;
+                    var hpdy = hp.hInY - hp.y;
+                    this._drawHandle(ctx, hp.x + hpdx * pulseScale, hp.y + hpdy * pulseScale, curveHandleIn, activeIn);
+                }
             }
 
         } else {
@@ -697,15 +825,10 @@ var Curvase = (function() {
             var p0 = this.points[0];
             var p1 = this.points[this.points.length - 1];
 
-            ctx.beginPath();
-            ctx.strokeStyle = "rgba(255,255,255,0.12)";
-            ctx.lineWidth = 8;
-            ctx.shadowColor = "rgba(255,255,255,0.4)";
-            ctx.shadowBlur = 8;
-
             var steps = 100;
 
             var currentMaxSpeed = MAX_SPEED;
+            var currentMinSpeed = 0;
             for (var k = 0; k <= steps; k++) {
                 var t = k / steps;
                 var mt = 1 - t;
@@ -714,7 +837,18 @@ var Curvase = (function() {
                 var speed = 0;
                 if (Math.abs(dxdt) > 0.0001) speed = dydt / dxdt;
                 if (speed > currentMaxSpeed) currentMaxSpeed = speed;
+                if (speed < currentMinSpeed) currentMinSpeed = speed;
             }
+            var speedRange = currentMaxSpeed - currentMinSpeed;
+            if (speedRange < 0.001) speedRange = 0.001;
+            this._speedMin = currentMinSpeed;
+            this._speedRange = speedRange;
+
+            ctx.beginPath();
+            ctx.strokeStyle = "rgba(255,255,255,0.12)";
+            ctx.lineWidth = 8;
+            ctx.shadowColor = "rgba(255,255,255,0.4)";
+            ctx.shadowBlur = 8;
 
             for (var k = 0; k <= steps; k++) {
                 var t = k / steps;
@@ -725,8 +859,7 @@ var Curvase = (function() {
                 var speed = 0;
                 if (Math.abs(dxdt) > 0.0001) speed = dydt / dxdt;
                 var px = this._toX(xt);
-
-                var py = this._toY(speed / currentMaxSpeed);
+                var py = this._toY((speed - currentMinSpeed) / speedRange);
                 if (k === 0) ctx.moveTo(px, py);
                 else ctx.lineTo(px, py);
             }
@@ -745,29 +878,30 @@ var Curvase = (function() {
                 var speed = 0;
                 if (Math.abs(dxdt) > 0.0001) speed = dydt / dxdt;
                 var px = this._toX(xt);
-                var py = this._toY(speed / currentMaxSpeed);
+                var py = this._toY((speed - currentMinSpeed) / speedRange);
                 if (k === 0) ctx.moveTo(px, py);
                 else ctx.lineTo(px, py);
             }
             ctx.stroke();
 
             var cp1x = p0.hOutX * 0.5;
-            var cp1y = Math.max(0, (p0.hOutY / Math.max(0.001, p0.hOutX)) / MAX_SPEED);
+            var cp1y = Math.max(0, Math.min(1, (p0.hOutY / Math.max(0.001, p0.hOutX) - currentMinSpeed) / speedRange));
 
             var cp2x = 1 - ((1 - p1.hInX) * 0.5);
-            var cp2y = Math.max(0, ((1 - p1.hInY) / Math.max(0.001, 1 - p1.hInX)) / MAX_SPEED);
+            var cp2y = Math.max(0, Math.min(1, ((1 - p1.hInY) / Math.max(0.001, 1 - p1.hInX) - currentMinSpeed) / speedRange));
 
-            ctx.strokeStyle = "#d1a000";
+            ctx.strokeStyle = curveHandleOut;
             ctx.lineWidth = 1.5;
             ctx.beginPath(); ctx.moveTo(this._toX(0), this._toY(cp1y)); ctx.lineTo(this._toX(cp1x), this._toY(cp1y)); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(this._toX(1), this._toY(cp2y)); ctx.lineTo(this._toX(cp2x), this._toY(cp2y)); ctx.stroke();
 
-            ctx.fillStyle = "#fff";
+            ctx.fillStyle = curveEndpoint;
             ctx.fillRect(this._toX(0)-3, this._toY(cp1y)-3, 6, 6);
             ctx.fillRect(this._toX(1)-3, this._toY(cp2y)-3, 6, 6);
 
-            ctx.fillStyle = "#d1a000";
+            ctx.fillStyle = curveHandleOut;
             ctx.beginPath(); ctx.arc(this._toX(cp1x), this._toY(cp1y), 4, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = curveHandleIn;
             ctx.beginPath(); ctx.arc(this._toX(cp2x), this._toY(cp2y), 4, 0, Math.PI*2); ctx.fill();
         }
 
@@ -783,11 +917,13 @@ var Curvase = (function() {
             } else {
                 if (sel.type === "hOut" && sp.hOutX !== null) {
                     scx = this._toX(sp.hOutX * 0.5);
-                    scy = this._toY(Math.max(0, (sp.hOutY / Math.max(0.001, sp.hOutX)) / MAX_SPEED));
+                    var rawSpeedOut2 = sp.hOutY / Math.max(0.001, sp.hOutX);
+                    scy = this._toY((rawSpeedOut2 - this._speedMin) / this._speedRange);
                 }
                 else if (sel.type === "hIn" && sp.hInX !== null) {
                     scx = this._toX(1 - (1 - sp.hInX) * 0.5);
-                    scy = this._toY(Math.max(0, ((1 - sp.hInY) / Math.max(0.001, 1 - sp.hInX)) / MAX_SPEED));
+                    var rawSpeedIn2 = (1 - sp.hInY) / Math.max(0.001, 1 - sp.hInX);
+                    scy = this._toY((rawSpeedIn2 - this._speedMin) / this._speedRange);
                 }
             }
 
@@ -853,7 +989,6 @@ var Curvase = (function() {
             ctx.stroke();
         }
 
-        var PADDING = 40;
         ctx.fillStyle = hasBg ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.22)";
         ctx.font = "9px 'Segoe UI', sans-serif";
         var xMinL = this.zoomLevel === 1 ? "0" : this.viewXMin.toFixed(1);
@@ -877,7 +1012,15 @@ var Curvase = (function() {
             ctx.save();
             ctx.beginPath();
             ctx.arc(cx, cy, HANDLE_RADIUS + 4, 0, Math.PI * 2);
-            ctx.fillStyle = color.replace(")", ",0.2)").replace("rgb", "rgba");
+            var glowColor = color;
+            if (color.indexOf("#") === 0) {
+                glowColor = hexToRgba(color, 0.2);
+            } else if (color.indexOf("rgb(") === 0) {
+                glowColor = color.replace(")", ",0.2)").replace("rgb", "rgba");
+            } else if (color.indexOf("rgba(") === 0) {
+                glowColor = color.replace(/[\d.]+\)$/, "0.2)");
+            }
+            ctx.fillStyle = glowColor;
             ctx.shadowColor = color;
             ctx.shadowBlur = 12;
             ctx.fill();
@@ -909,6 +1052,7 @@ var Curvase = (function() {
     };
 
     BezierEditor.prototype.setValues = function(x1, y1, x2, y2) {
+        this._cancelMorph();
         this._commit();
         this.points = [
             {x: 0, y: 0, hInX: null, hInY: null, hOutX: x1, hOutY: y1},
@@ -919,10 +1063,12 @@ var Curvase = (function() {
 
     BezierEditor.prototype.setEndHandles = function(x1, y1, x2, y2) {
         this._cancelMorph();
-        this._commit();
-        this.points[0].hOutX = x1;
-        this.points[0].hOutY = y1;
+        var p0 = this.points[0];
         var last = this.points[this.points.length - 1];
+        if (p0.hOutX === x1 && p0.hOutY === y1 && last.hInX === x2 && last.hInY === y2) return;
+        this._commit();
+        p0.hOutX = x1;
+        p0.hOutY = y1;
         last.hInX = x2;
         last.hInY = y2;
         this._scheduleRender();
@@ -930,56 +1076,146 @@ var Curvase = (function() {
 
     BezierEditor.prototype.morphTo = function(x1, y1, x2, y2, durationMs) {
         this._cancelMorph();
-        this._commit();
 
-        var duration = (typeof durationMs === "number" && durationMs > 0) ? durationMs : 420;
+        var duration = 420;
+        if (this.morphStyle === "spring") {
+            duration = 500;
+        } else if (this.morphStyle === "snap") {
+            duration = 350;
+        } else if (this.morphStyle === "smooth") {
+            duration = 400;
+        } else if (this.morphStyle === "linear") {
+            duration = 300;
+        }
+        if (typeof durationMs === "number" && durationMs > 0) {
+            duration = durationMs;
+        }
 
-        var fromX1 = this.points[0].hOutX;
-        var fromY1 = this.points[0].hOutY;
-        var last   = this.points[this.points.length - 1];
-        var fromX2 = last.hInX;
-        var fromY2 = last.hInY;
+        var p0 = this.points[0];
+        var pLast = this.points[this.points.length - 1];
+
+        var fromX1 = p0.hOutX;
+        var fromY1 = p0.hOutY;
+        var fromX2 = pLast.hInX;
+        var fromY2 = pLast.hInY;
 
         if (fromX1 === x1 && fromY1 === y1 && fromX2 === x2 && fromY2 === y2) return;
 
-        var self      = this;
-        var startTime = null;
+        this._commit();
+        if (this.points.length > 2) {
+            this.points = [
+                {x: 0, y: 0, hInX: null, hInY: null, hOutX: fromX1, hOutY: fromY1},
+                {x: 1, y: 1, hInX: fromX2, hInY: fromY2, hOutX: null, hOutY: null}
+            ];
+        }
+        this._morphStartPoints = JSON.parse(JSON.stringify(this.points));
 
-        function springEase(t) {
+        var self = this;
+        var startTime = null;
+        var lastTime = null;
+
+        var stiffness = 160;
+        var damping = 16;
+
+        var currentX1 = fromX1;
+        var currentY1 = fromY1;
+        var currentX2 = fromX2;
+        var currentY2 = fromY2;
+
+        var velX1 = 0;
+        var velY1 = 0;
+        var velX2 = 0;
+        var velY2 = 0;
+
+        function getEasedT(style, t) {
             if (t <= 0) return 0;
             if (t >= 1) return 1;
-            var t2 = t * t;
-            var t3 = t2 * t;
-            var t4 = t3 * t;
-            var t5 = t4 * t;
-            return (-2.4 * t5) + (7.2 * t4) + (-8.1 * t3) + (3.9 * t2) + (1.4 * t);
+            if (style === "snap") {
+                return 1 - Math.pow(2, -10 * t);
+            } else if (style === "smooth") {
+                return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            } else {
+                return t;
+            }
         }
 
         function step(timestamp) {
-            if (!startTime) startTime = timestamp;
-            var elapsed = timestamp - startTime;
-            var rawT    = Math.min(elapsed / duration, 1);
-            var easedT  = springEase(rawT);
+            if (!startTime) {
+                startTime = timestamp;
+                lastTime = timestamp;
+            }
+            var dt = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
 
-            self.points[0].hOutX = fromX1 + (x1 - fromX1) * easedT;
-            self.points[0].hOutY = fromY1 + (y1 - fromY1) * easedT;
-            var lastPt = self.points[self.points.length - 1];
-            lastPt.hInX = fromX2 + (x2 - fromX2) * easedT;
-            lastPt.hInY = fromY2 + (y2 - fromY2) * easedT;
+            if (dt > 0.1) dt = 0.1;
 
-            if (rawT < 1) {
-                self._scheduleRender();
-                if (self.onUpdate) self.onUpdate();
-                self._morphRafId = requestAnimationFrame(step);
+            if (self.morphStyle === "spring") {
+                var fX1 = -stiffness * (currentX1 - x1) - damping * velX1;
+                var fY1 = -stiffness * (currentY1 - y1) - damping * velY1;
+                var fX2 = -stiffness * (currentX2 - x2) - damping * velX2;
+                var fY2 = -stiffness * (currentY2 - y2) - damping * velY2;
+
+                velX1 += fX1 * dt;
+                velY1 += fY1 * dt;
+                velX2 += fX2 * dt;
+                velY2 += fY2 * dt;
+
+                currentX1 += velX1 * dt;
+                currentY1 += velY1 * dt;
+                currentX2 += velX2 * dt;
+                currentY2 += velY2 * dt;
+
+                self.points[0].hOutX = currentX1;
+                self.points[0].hOutY = currentY1;
+                var lp = self.points[self.points.length - 1];
+                lp.hInX = currentX2;
+                lp.hInY = currentY2;
+
+                var dX1 = Math.abs(currentX1 - x1), dY1 = Math.abs(currentY1 - y1);
+                var dX2 = Math.abs(currentX2 - x2), dY2 = Math.abs(currentY2 - y2);
+                var v1 = Math.abs(velX1) + Math.abs(velY1), v2 = Math.abs(velX2) + Math.abs(velY2);
+
+                if (dX1 < 0.001 && dY1 < 0.001 && dX2 < 0.001 && dY2 < 0.001 && v1 < 0.01 && v2 < 0.01) {
+                    self.points[0].hOutX = x1;
+                    self.points[0].hOutY = y1;
+                    var finalPt = self.points[self.points.length - 1];
+                    finalPt.hInX = x2;
+                    finalPt.hInY = y2;
+                    self._morphStartPoints = null;
+                    self._morphRafId = 0;
+                    self._scheduleRender();
+                    if (self.onUpdate) self.onUpdate();
+                } else {
+                    self._scheduleRender();
+                    if (self.onUpdate) self.onUpdate();
+                    self._morphRafId = requestAnimationFrame(step);
+                }
             } else {
-                self.points[0].hOutX = x1;
-                self.points[0].hOutY = y1;
-                var finalPt = self.points[self.points.length - 1];
-                finalPt.hInX = x2;
-                finalPt.hInY = y2;
-                self._morphRafId = 0;
-                self._scheduleRender();
-                if (self.onUpdate) self.onUpdate();
+                var elapsed = timestamp - startTime;
+                var rawT = Math.min(elapsed / duration, 1);
+                var easedT = getEasedT(self.morphStyle, rawT);
+
+                self.points[0].hOutX = fromX1 + (x1 - fromX1) * easedT;
+                self.points[0].hOutY = fromY1 + (y1 - fromY1) * easedT;
+                var lastPt = self.points[self.points.length - 1];
+                lastPt.hInX = fromX2 + (x2 - fromX2) * easedT;
+                lastPt.hInY = fromY2 + (y2 - fromY2) * easedT;
+
+                if (rawT < 1) {
+                    self._scheduleRender();
+                    if (self.onUpdate) self.onUpdate();
+                    self._morphRafId = requestAnimationFrame(step);
+                } else {
+                    self.points[0].hOutX = x1;
+                    self.points[0].hOutY = y1;
+                    var finalPt = self.points[self.points.length - 1];
+                    finalPt.hInX = x2;
+                    finalPt.hInY = y2;
+                    self._morphStartPoints = null;
+                    self._morphRafId = 0;
+                    self._scheduleRender();
+                    if (self.onUpdate) self.onUpdate();
+                }
             }
         }
 
@@ -991,6 +1227,7 @@ var Curvase = (function() {
             cancelAnimationFrame(this._morphRafId);
             this._morphRafId = 0;
         }
+        this._morphStartPoints = null;
     };
 
     BezierEditor.prototype.getValues = function() {
@@ -1080,12 +1317,12 @@ var Curvase = (function() {
             var nsx2 = 1 - sx1;
             var nsy2 = 1 - sy1;
 
-            if (dx > 0.0001) {
+            if (a.hOutX !== null) {
                 a.hOutX = a.x + nsx1 * dx;
-                b.hInX = a.x + nsx2 * dx;
-            }
-            if (Math.abs(dy) > 0.0001) {
                 a.hOutY = a.y + nsy1 * dy;
+            }
+            if (b.hInX !== null) {
+                b.hInX = a.x + nsx2 * dx;
                 b.hInY = a.y + nsy2 * dy;
             }
         }
@@ -1122,13 +1359,15 @@ var Curvase = (function() {
                 this._savedPositions.push({x: p.x, y: p.y, hInX: p.hInX, hInY: p.hInY, hOutX: p.hOutX, hOutY: p.hOutY});
             } else if (sel.type === "hOut") {
                 if (this.isSpeedMode) {
-                    this._savedPositions.push({x: p.hOutX * 0.5, y: (p.hOutY / Math.max(0.001, p.hOutX)) / MAX_SPEED});
+                    var rawSpeedOut = (p.hOutY / Math.max(0.001, p.hOutX));
+                    this._savedPositions.push({x: p.hOutX * 0.5, y: (rawSpeedOut - this._speedMin) / this._speedRange});
                 } else {
                     this._savedPositions.push({x: p.hOutX, y: p.hOutY});
                 }
             } else if (sel.type === "hIn") {
                 if (this.isSpeedMode) {
-                    this._savedPositions.push({x: 1 - ((1 - p.hInX) * 0.5), y: ((1 - p.hInY) / Math.max(0.001, 1 - p.hInX)) / MAX_SPEED});
+                    var rawSpeedIn = ((1 - p.hInY) / Math.max(0.001, 1 - p.hInX));
+                    this._savedPositions.push({x: 1 - ((1 - p.hInX) * 0.5), y: (rawSpeedIn - this._speedMin) / this._speedRange});
                 } else {
                     this._savedPositions.push({x: p.hInX, y: p.hInY});
                 }
@@ -1156,8 +1395,8 @@ var Curvase = (function() {
                 if (this.isSpeedMode) {
                     var newVisX = Math.max(0, Math.min(1, saved.x + dx));
                     p.hOutX = Math.round(Math.min(1, newVisX * 2) * 100) / 100;
-                    var speed = Math.max(0, saved.y + dy) * MAX_SPEED;
-                    p.hOutY = Math.round((speed * Math.max(0.001, p.hOutX)) * 100) / 100;
+                    var rawSpeedOut = Math.max(0, Math.min(MAX_SPEED, saved.y + dy)) * this._speedRange + this._speedMin;
+                    p.hOutY = Math.round((rawSpeedOut * Math.max(0.001, p.hOutX)) * 100) / 100;
                 } else {
                     p.hOutX = Math.round(Math.max(0, Math.min(1, saved.x + dx)) * 100) / 100;
                     p.hOutY = Math.round(Math.max(-2, Math.min(3, saved.y + dy)) * 100) / 100;
@@ -1166,8 +1405,8 @@ var Curvase = (function() {
                 if (this.isSpeedMode) {
                     var newVisX = Math.max(0, Math.min(1, saved.x + dx));
                     p.hInX = Math.round((1 - Math.min(1, (1 - newVisX) * 2)) * 100) / 100;
-                    var speed = Math.max(0, saved.y + dy) * MAX_SPEED;
-                    p.hInY = Math.round((1 - (speed * Math.max(0.001, 1 - p.hInX))) * 100) / 100;
+                    var rawSpeedIn = Math.max(0, Math.min(MAX_SPEED, saved.y + dy)) * this._speedRange + this._speedMin;
+                    p.hInY = Math.round((1 - (rawSpeedIn * Math.max(0.001, 1 - p.hInX))) * 100) / 100;
                 } else {
                     p.hInX = Math.round(Math.max(0, Math.min(1, saved.x + dx)) * 100) / 100;
                     p.hInY = Math.round(Math.max(-2, Math.min(3, saved.y + dy)) * 100) / 100;
@@ -1195,7 +1434,9 @@ var Curvase = (function() {
 
             if (p.hOutX !== null) {
                 var visOutX = this.isSpeedMode ? p.hOutX * 0.5 : p.hOutX;
-                var visOutY = this.isSpeedMode ? (p.hOutY / Math.max(0.001, p.hOutX)) / MAX_SPEED : p.hOutY;
+                var visOutY = this.isSpeedMode
+                    ? (p.hOutY / Math.max(0.001, p.hOutX) - this._speedMin) / this._speedRange
+                    : p.hOutY;
                 var hx = this._toX(visOutX), hy = this._toY(visOutY);
                 if (hx >= x1 && hx <= x2 && hy >= y1 && hy <= y2) {
                     this.selected.push({type: "hOut", index: i});
@@ -1203,7 +1444,9 @@ var Curvase = (function() {
             }
             if (p.hInX !== null) {
                 var visInX = this.isSpeedMode ? 1 - ((1 - p.hInX) * 0.5) : p.hInX;
-                var visInY = this.isSpeedMode ? ((1 - p.hInY) / Math.max(0.001, 1 - p.hInX)) / MAX_SPEED : p.hInY;
+                var visInY = this.isSpeedMode
+                    ? ((1 - p.hInY) / Math.max(0.001, 1 - p.hInX) - this._speedMin) / this._speedRange
+                    : p.hInY;
                 var hix = this._toX(visInX), hiy = this._toY(visInY);
                 if (hix >= x1 && hix <= x2 && hiy >= y1 && hiy <= y2) {
                     this.selected.push({type: "hIn", index: i});
@@ -1353,15 +1596,14 @@ var Curvase = (function() {
             if (!startTime) startTime = ts;
             var t = Math.min((ts - startTime) / FADE_OUT_MS, 1);
             self.waveformOpacity = startOpacity * (1 - t);
-            self._rafId = 0;
-            self._draw();
+            self._scheduleRender();
             if (t < 1) {
                 self._waveformFadeRaf = requestAnimationFrame(fadeOut);
             } else {
                 self.waveformData    = null;
                 self.waveformOpacity = 0;
                 self._waveformFadeRaf = 0;
-                self._draw();
+                self._scheduleRender();
             }
         }
 
@@ -1406,14 +1648,13 @@ var Curvase = (function() {
 
             var eased = 1 - (1 - t) * (1 - t);
             self.waveformOpacity = startOpacity + (1 - startOpacity) * eased;
-            self._rafId = 0;
-            self._draw();
+            self._scheduleRender();
             if (t < 1) {
                 self._waveformFadeRaf = requestAnimationFrame(fadeIn);
             } else {
                 self.waveformOpacity  = 1;
                 self._waveformFadeRaf = 0;
-                self._draw();
+                self._scheduleRender();
             }
         }
 
@@ -1538,6 +1779,14 @@ var Curvase = (function() {
             this._drawSpectrumRadial(ctx, boxLeft, boxTop, boxW, boxH);
             return;
         }
+        if (this.spectrumMode === "wave") {
+            this._drawSpectrumWave(ctx, boxLeft, boxTop, boxW, boxH);
+            return;
+        }
+        if (this.spectrumMode === "mirrored") {
+            this._drawSpectrumMirrored(ctx, boxLeft, boxTop, boxW, boxH);
+            return;
+        }
 
         var data      = this.spectrumData;
 
@@ -1617,12 +1866,139 @@ var Curvase = (function() {
     };
 
     BezierEditor.prototype.toggleSpectrumMode = function() {
-        this.spectrumMode = (this.spectrumMode === "bars") ? "radial" : "bars";
+        if (this.spectrumMode === "bars") {
+            this.spectrumMode = "radial";
+        } else if (this.spectrumMode === "radial") {
+            this.spectrumMode = "wave";
+        } else if (this.spectrumMode === "wave") {
+            this.spectrumMode = "mirrored";
+        } else {
+            this.spectrumMode = "bars";
+        }
         if (!this._spectrumRadialPeaks) {
             this._spectrumRadialPeaks = new Float32Array(128);
         }
         this._scheduleRender();
         return this.spectrumMode;
+    };
+
+    BezierEditor.prototype._drawSpectrumWave = function(ctx, boxLeft, boxTop, boxW, boxH) {
+        var data = this.spectrumData;
+        var useBins = Math.floor(data.length / 2);
+        var BAR_COUNT = 64;
+        var binsPerBar = Math.max(1, Math.floor(useBins / BAR_COUNT));
+        var barW = boxW / BAR_COUNT;
+
+        var points = [];
+        for (var b = 0; b < BAR_COUNT; b++) {
+            var binStart = b * binsPerBar;
+            var sum = 0;
+            for (var k = 0; k < binsPerBar; k++) sum += data[binStart + k];
+            var avg = sum / binsPerBar;
+            var norm = avg / 255;
+            norm = Math.log(1 + norm * 1.5) / Math.log(2.5);
+            if (norm > 1) norm = 1;
+            
+            var px = boxLeft + b * barW + barW / 2;
+            var py = boxTop + boxH - norm * boxH * 0.8;
+            points.push({x: px, y: py});
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(boxLeft, boxTop, boxW, boxH);
+        ctx.clip();
+
+        var beatE = this._beatEnergy;
+        var topR = Math.round(0   + beatE * 255);
+        var topG = Math.round(212 + beatE * (255 - 212));
+        var topB = Math.round(170 + beatE * (255 - 170));
+
+        ctx.beginPath();
+        ctx.moveTo(boxLeft, boxTop + boxH);
+        ctx.lineTo(points[0].x, points[0].y);
+        for (var i = 0; i < points.length - 1; i++) {
+            var xc = (points[i].x + points[i + 1].x) / 2;
+            var yc = (points[i].y + points[i + 1].y) / 2;
+            ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+        }
+        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        ctx.lineTo(boxLeft + boxW, boxTop + boxH);
+        ctx.closePath();
+
+        var fillGrad = ctx.createLinearGradient(0, boxTop, 0, boxTop + boxH);
+        fillGrad.addColorStop(0, "rgba(" + topR + "," + topG + "," + topB + ",0.18)");
+        fillGrad.addColorStop(1, "rgba(0,140,120,0.0)");
+        ctx.fillStyle = fillGrad;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (var i = 0; i < points.length - 1; i++) {
+            var xc = (points[i].x + points[i + 1].x) / 2;
+            var yc = (points[i].y + points[i + 1].y) / 2;
+            ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+        }
+        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        
+        ctx.strokeStyle = "rgba(" + topR + "," + topG + "," + topB + ",0.85)";
+        ctx.lineWidth = 3;
+        ctx.shadowColor = "rgba(" + topR + "," + topG + "," + topB + ",1.0)";
+        ctx.shadowBlur = 12;
+        ctx.stroke();
+
+        ctx.restore();
+    };
+
+    BezierEditor.prototype._drawSpectrumMirrored = function(ctx, boxLeft, boxTop, boxW, boxH) {
+        var data = this.spectrumData;
+        var useBins = Math.floor(data.length / 2);
+        var BAR_COUNT = 64;
+        var binsPerBar = Math.max(1, Math.floor(useBins / BAR_COUNT));
+        var barW = boxW / BAR_COUNT;
+        var GAP = Math.max(1, Math.floor(barW * 0.15));
+        var fillW = Math.max(1, barW - GAP);
+        var midY = boxTop + boxH / 2;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(boxLeft, boxTop, boxW, boxH);
+        ctx.clip();
+
+        var beatE = this._beatEnergy;
+        var topR = Math.round(0   + beatE * 255);
+        var topG = Math.round(212 + beatE * (255 - 212));
+        var topB = Math.round(170 + beatE * (255 - 170));
+        var midR = Math.round(0   + beatE * 180);
+        var midG = Math.round(180 + beatE * (255 - 180));
+        var midB = Math.round(150 + beatE * (255 - 150));
+
+        for (var b = 0; b < BAR_COUNT; b++) {
+            var binStart = b * binsPerBar;
+            var sum = 0;
+            for (var k = 0; k < binsPerBar; k++) sum += data[binStart + k];
+            var avg = sum / binsPerBar;
+            var norm = avg / 255;
+            norm = Math.log(1 + norm * 1.5) / Math.log(2.5);
+            if (norm > 1) norm = 1;
+
+            var barH = norm * boxH * 0.44;
+            var barX = boxLeft + b * barW;
+            
+            if (barH < 1) continue;
+
+            var grad = ctx.createLinearGradient(0, midY - barH, 0, midY + barH);
+            grad.addColorStop(0, "rgba(0,140,120,0.1)");
+            grad.addColorStop(0.3, "rgba(" + midR + "," + midG + "," + midB + ",0.6)");
+            grad.addColorStop(0.5, "rgba(" + topR + "," + topG + "," + topB + ",0.95)");
+            grad.addColorStop(0.7, "rgba(" + midR + "," + midG + "," + midB + ",0.6)");
+            grad.addColorStop(1, "rgba(0,140,120,0.1)");
+
+            ctx.fillStyle = grad;
+            ctx.fillRect(barX + GAP / 2, midY - barH, fillW, barH * 2);
+        }
+
+        ctx.restore();
     };
 
     BezierEditor.prototype._drawSpectrumRadial = function(ctx, boxLeft, boxTop, boxW, boxH) {

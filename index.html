@@ -2,10 +2,34 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Curvase</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Curvase - Premium Bezier Easing Curve Editor and Inspector for After Effects">
+    <title>Curvase - Premium Bezier Easing Curve Editor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 400;
+            src: local('Inter'), local('Inter-Regular');
+        }
+        @font-face {
+            font-family: 'Outfit';
+            font-style: normal;
+            font-weight: 700;
+            src: local('Outfit'), local('Outfit-Bold');
+        }
+    </style>
     <link rel="stylesheet" href="./style.css">
 </head>
 <body>
+<div class="glowing-background">
+    <div class="glow-orb orb-1"></div>
+    <div class="glow-orb orb-2"></div>
+    <div class="glow-orb orb-3"></div>
+</div>
 <div id="curvase-app">
 
     <header id="header">
@@ -16,6 +40,13 @@
         </div>
         <div id="header-right">
             <button type="button" id="btn-speed-mode" class="header-chip" title="Speed graph view — Y is velocity, not value.">Speed</button>
+            <button type="button" id="btn-symmetry-mode" class="header-chip" title="Symmetry mode — links handle x2,y2 to 1-x1,1-y1.">Symmetry</button>
+            <select id="select-morph-style" class="header-select" title="Morphing animation style">
+                <option value="spring">Spring Morph</option>
+                <option value="snap">Snap Morph</option>
+                <option value="smooth">Smooth Morph</option>
+                <option value="linear">Linear Morph</option>
+            </select>
 
             <div id="audio-controls">
                 <button type="button" id="btn-mute" title="Mute / Unmute" aria-label="Mute or unmute background video">🔊</button>
@@ -96,6 +127,35 @@
             </div>
 
             <div id="actions-row" class="apply-toolbar">
+                <button type="button" class="ctrl-btn" id="btn-match-vel" title="Match Velocity (Smooth Transition)" aria-label="Match Velocity">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 12c3 0 3-8 8-8s5 8 8 8" />
+                    </svg>
+                </button>
+                <button type="button" class="ctrl-btn" id="btn-bounce-gen" title="Overshoot/Bounce Generator" aria-label="Overshoot Generator">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 20L10 4l6 16 2-8 2 8" />
+                    </svg>
+                </button>
+                <button type="button" class="ctrl-btn" id="btn-loop-gen" title="Damped Spring Loop / Wave Generator" aria-label="Loop Wave Generator">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/>
+                        <path d="M12 6a6 6 0 1 0 6 6 6 6 0 0 0-6-6zm0 10a4 4 0 1 1 4-4 4 4 0 0 1-4 4z"/>
+                    </svg>
+                </button>
+                <button type="button" class="ctrl-btn" id="btn-theme-selector" title="Switch UI Theme Aesthetics" aria-label="Switch Theme">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"/>
+                        <circle cx="12" cy="6" r="1"/>
+                        <circle cx="18" cy="12" r="1"/>
+                        <circle cx="12" cy="18" r="1"/>
+                        <circle cx="6" cy="12" r="1"/>
+                        <circle cx="16" cy="8" r="1"/>
+                        <circle cx="8" cy="16" r="1"/>
+                        <circle cx="16" cy="16" r="1"/>
+                        <circle cx="8" cy="8" r="1"/>
+                    </svg>
+                </button>
                 <button type="button" id="btn-apply" title="Apply curve to selected layers and keyframes in After Effects" aria-label="Apply easing to keyframes"><span class="btn-label">Apply to keyframes</span></button>
             </div>
 
@@ -196,6 +256,20 @@
 
 </div>
 
+<div id="save-preset-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="save-preset-modal-title">
+    <div class="modal-content" role="document">
+        <h3 id="save-preset-modal-title">Save Preset</h3>
+        <p class="modal-hint">Name your preset and choose a category.</p>
+        <input type="text" id="save-preset-name" placeholder="Preset name…" spellcheck="false" autocomplete="off" style="width:100%;padding:7px 10px;background:#181818;border:1px solid var(--border2);color:var(--text);border-radius:var(--radius-sm);font-size:12px;outline:none;margin-bottom:8px;">
+        <select id="save-preset-cat" class="modal-select" style="margin-bottom:4px;"></select>
+        <input type="text" id="save-preset-newcat" placeholder="New category name…" spellcheck="false" autocomplete="off" style="display:none;width:100%;padding:7px 10px;background:#181818;border:1px solid var(--border2);color:var(--text);border-radius:var(--radius-sm);font-size:12px;outline:none;margin-top:6px;">
+        <div class="modal-actions">
+            <button type="button" id="btn-save-preset-cancel">Cancel</button>
+            <button type="button" id="btn-save-preset-confirm">Save</button>
+        </div>
+    </div>
+</div>
+
 <div id="status-toast" class="status-toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <div id="edit-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
@@ -210,6 +284,47 @@
     </div>
 </div>
 
+<div id="bounce-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="bounce-modal-title">
+    <div class="modal-content" role="document">
+        <h3 id="bounce-modal-title">Overshoot</h3>
+        <p class="modal-hint">Generates damped spring keyframes after the last selected keyframe.</p>
+        <div class="bounce-sliders">
+            <label><span>Amplitude</span> <input type="range" id="b-amp" min="1" max="100" value="30"></label>
+            <label><span>Frequency</span> <input type="range" id="b-freq" min="1" max="20" value="3"></label>
+            <label><span>Decay</span> <input type="range" id="b-decay" min="1" max="20" value="5"></label>
+        </div>
+        <div class="modal-actions">
+            <button type="button" id="btn-bounce-cancel">Cancel</button>
+            <button type="button" id="btn-bounce-apply">Generate</button>
+        </div>
+    </div>
+</div>
+
+<div id="loop-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="loop-modal-title">
+    <div class="modal-content" role="document">
+        <h3 id="loop-modal-title">Loop / Wave Generator</h3>
+        <p class="modal-hint">Generates continuous wave keyframes after the last selected keyframe.</p>
+        <div class="bounce-sliders">
+            <label><span>Wave Type</span>
+                <select id="l-type" class="modal-select">
+                    <option value="Sine">Sine Wave</option>
+                    <option value="Triangle">Triangle Wave</option>
+                    <option value="Square">Square Wave</option>
+                    <option value="Noise">Noise Wobble</option>
+                </select>
+            </label>
+            <label><span>Amplitude</span> <input type="range" id="l-amp" min="1" max="200" value="50"></label>
+            <label><span>Frequency (Hz)</span> <input type="range" id="l-freq" min="0" max="20" step="0.5" value="2"></label>
+            <label><span>Duration (sec)</span> <input type="range" id="l-dur" min="1" max="10" value="4"></label>
+            <label><span>Decay (fade out)</span> <input type="range" id="l-decay" min="0" max="10" value="0"></label>
+        </div>
+        <div class="modal-actions">
+            <button type="button" id="btn-loop-cancel">Cancel</button>
+            <button type="button" id="btn-loop-apply">Generate</button>
+        </div>
+    </div>
+</div>
+
 <div id="theme-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="theme-modal-title">
     <div class="modal-content theme-modal-content" role="document">
         <h3 id="theme-modal-title">Theme Curvase</h3>
@@ -217,8 +332,10 @@
 
         <div class="theme-presets" id="theme-presets">
             <button type="button" class="theme-preset-btn" data-theme-preset="default">Default</button>
-            <button type="button" class="theme-preset-btn" data-theme-preset="ocean">Ocean</button>
-            <button type="button" class="theme-preset-btn" data-theme-preset="violet">Violet</button>
+            <button type="button" class="theme-preset-btn" data-theme-preset="cyberpunk">Cyberpunk</button>
+            <button type="button" class="theme-preset-btn" data-theme-preset="ae">AE Classic</button>
+            <button type="button" class="theme-preset-btn" data-theme-preset="nordic">Nordic Frost</button>
+            <button type="button" class="theme-preset-btn" data-theme-preset="sunset">Amber Sunset</button>
         </div>
 
         <div class="theme-grid" id="theme-grid">
@@ -255,28 +372,5 @@
 <script src="./lib/CSInterface-4.0.0.js"></script>
 <script src="./curvase.js"></script>
 <script src="./ext.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        var bgInput = document.getElementById('bg-file-input');
-        var audioControls = document.getElementById('audio-controls');
-        if (bgInput) {
-            bgInput.addEventListener('change', function(e) {
-                var file = e.target.files[0];
-                if (!file) return;
-                if (file.type.startsWith('video/')) {
-                    audioControls.classList.add('show-audio');
-                    setTimeout(function() {
-                        if (window.editor && window.editor.bgVideoElement) {
-                            window.editor.bgVideoElement.muted = false;
-                            window.editor.bgVideoElement.play();
-                        }
-                    }, 300);
-                } else {
-                    audioControls.classList.remove('show-audio');
-                }
-            });
-        }
-    });
-</script>
 </body>
 </html>
