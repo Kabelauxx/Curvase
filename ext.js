@@ -522,23 +522,27 @@ var curvaseApp = (function() {
         }
 
         var modeBadge = document.getElementById("header-mode-badge");
+        var navTabCurve = document.getElementById("nav-tab-curve");
+        var navTabTools = document.getElementById("nav-tab-tools");
 
-
-        btnMode.onclick = function() {
-            isToolsMode = !isToolsMode;
+        function switchView(toolsMode) {
+            if (isToolsMode === toolsMode) return;
+            isToolsMode = toolsMode;
             var from = isToolsMode ? viewCurve : viewTools;
             var to   = isToolsMode ? viewTools  : viewCurve;
-            animClass(btnMode, "brand-pop", 560);
+
+            if (navTabCurve) navTabCurve.classList.toggle("active", !isToolsMode);
+            if (navTabTools) navTabTools.classList.toggle("active", isToolsMode);
+
             if (modeBadge) {
                 modeBadge.textContent = isToolsMode ? "Tools" : "Curve";
                 modeBadge.classList.toggle("mode-badge--tools", isToolsMode);
-                animClass(modeBadge, "mode-badge--pop", 680);
             }
             from.classList.add("view-exit");
             setTimeout(function() {
                 from.style.display = "none";
                 from.classList.remove("view-exit");
-                to.style.display = isToolsMode ? "flex" : "flex";
+                to.style.display = "flex";
                 to.classList.add("view-enter");
 
                 if (isToolsMode) {
@@ -554,7 +558,68 @@ var curvaseApp = (function() {
             }, 300);
             btnMode.classList.toggle("tools-active", isToolsMode);
             isToolsMode ? startInspector() : stopInspector();
+        }
+
+        if (navTabCurve) navTabCurve.onclick = function() { switchView(false); };
+        if (navTabTools) navTabTools.onclick = function() { switchView(true); };
+
+        btnMode.onclick = function() {
+            switchView(!isToolsMode);
+            animClass(btnMode, "brand-pop", 560);
         };
+
+        (function initSettingsDrawer() {
+            var drawer = document.getElementById("settings-drawer");
+            var toggleBtn = document.getElementById("btn-settings-toggle");
+            var closeBtn = document.getElementById("btn-settings-close");
+
+            if (toggleBtn && drawer) {
+                toggleBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    drawer.classList.toggle("open");
+                };
+            }
+            if (closeBtn && drawer) {
+                closeBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    drawer.classList.remove("open");
+                };
+            }
+            document.addEventListener("mousedown", function(e) {
+                if (drawer && drawer.classList.contains("open")) {
+                    if (!drawer.contains(e.target) && !toggleBtn.contains(e.target)) {
+                        drawer.classList.remove("open");
+                    }
+                }
+            });
+
+            function syncToggleLabel(btn) {
+                if (!btn) return;
+                var isActive = btn.classList.contains("active") || btn.classList.contains("active--radial");
+                if (btn.id === "btn-bg") {
+                    btn.textContent = (editor && editor.bgVideoElement) ? "Loaded" : "Select";
+                } else {
+                    btn.textContent = isActive ? "On" : "Off";
+                }
+            }
+
+            var toggles = document.querySelectorAll(".toggle-switch-btn");
+            toggles.forEach(function(t) {
+                syncToggleLabel(t);
+                t.addEventListener("click", function() {
+                    var self = this;
+                    setTimeout(function() { syncToggleLabel(self); }, 40);
+                });
+            });
+
+            var bgFileInput = document.getElementById("bg-file-input");
+            if (bgFileInput) {
+                bgFileInput.addEventListener("change", function() {
+                    var btnBg = document.getElementById("btn-bg");
+                    setTimeout(function() { syncToggleLabel(btnBg); }, 150);
+                });
+            }
+        })();
 
         function bindDemakBtn(id, scriptStr) {
             var el = document.getElementById(id);
