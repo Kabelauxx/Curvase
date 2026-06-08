@@ -58,9 +58,3 @@ Main Developers
 -Crayon
 -Kabelauxx
 -Cryztalz
-
-Some Idea From
--J1zo
-
-Demak Demek Tools From
--Ciko
